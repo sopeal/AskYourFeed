@@ -43,9 +43,8 @@ Użytkownicy konsumują feed X z różnymi intencjami: szybki przegląd dnia vs.
 * Usuwanie pojedynczego wpisu i „Usuń wszystko”.
 * Brak automatycznej retencji i brak eksportu.
 
-3.7. Telemetria i koszt
-* Telemetria wyłącznie operacyjna, bez PII (latencja, error rate, rate-limit hits, wykorzystanie budżetu).
-* Budżet globalny aplikacji ≤15 €/msc; po wyczerpaniu natychmiastowa pauza ingestu i blokada nowych odpowiedzi LLM; czytelny komunikat w UI.
+3.7. Telemetria
+* Telemetria wyłącznie operacyjna, bez PII (latencja, error rate, rate-limit hits).
 
 3.8. Platforma i UX
 * Responsywna aplikacja web (PL), dark mode.
@@ -236,10 +235,6 @@ Kryteria akceptacji:
 * Średni czas od publikacji do widoczności ≤1 h (metryka: różnica czasu publikacji postu vs. dostępność w wyszukiwaniu/LLM – definicja w 4.3.g).
 * Stabilność ingestu: niski odsetek błędów i kontrola rate-limit hits (metryki: error rate, liczba retry, 429/min).
 * Dostępność Q&A: odsetek udanych odpowiedzi vs. błędów systemowych.
-
-6.2. Koszt i kontrola budżetu
-* Wykorzystanie budżetu ≤15 €/msc; zero przekroczeń w normalnym użyciu.
-* W przypadku wyczerpania – poprawne zastosowanie polityki pauzy i blokady (metryka: czas w stanie pauzy, liczba zablokowanych żądań Q&A).
 
 6.3. Doświadczenie użytkownika
 * Czas odpowiedzi Q&A w typowych warunkach MVP w akceptowalnym przedziale (target do ustalenia w testach wydajności).

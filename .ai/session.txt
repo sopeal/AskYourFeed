@@ -1,0 +1,96 @@
+<conversation_summary> <decisions>
+[1] Store posts per-user with PRIMARY KEY (user_id, x_post_id) for privacy/RLS and simple deletions.
+[2] Use BIGINT for all X snowflake IDs with CHECK (id > 0); keep UNIQUE (user_id, x_post_id).
+[3] Keep `authors` global (no RLS), keyed by `x_author_id BIGINT`; introduce user-scoped `user_following(user_id UUID, x_author_id BIGINT, last_checked_at TIMESTAMPTZ)` with indexes on (user_id, x_author_id) and (user_id, last_checked_at).
+[4] `posts` fields: x_post_id BIGINT, author_id FK, published_at TIMESTAMPTZ, url TEXT (canonical X URL), text TEXT (includes media transcripts & summaries), conversation_id BIGINT NULL, ingested_at TIMESTAMPTZ, first_visible_at TIMESTAMPTZ, edited_seen BOOLEAN DEFAULT false. Threads are separate rows; no `lang` column.
+[5] Media content (images/video) is transcribed/summarized by business logic and stored only in `posts.text`; no separate media table.
+[6] No language field; the LLM handles PL/EN (and others) at inference time.
+[7] Q&A history: `qa_messages(id ULID, user_id, question TEXT, answer TEXT, date_from TIMESTAMPTZ, date_to TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now())` and `qa_sources(qa_id, user_id, x_post_id)` with FK (user_id, x_post_id) → posts and UNIQUE (qa_id, x_post_id); index `qa_messages` on (user_id, created_at DESC).
+[8] Enable RLS on user-scoped tables (`posts`, `qa_messages`, `qa_sources`, `ingest_runs`, optionally token metadata). Policy: `USING (user_id = current_setting('app.user_id', true)::uuid)`; set with `SET LOCAL app.user_id = '<uuid>'`.
+[9] Secrets: prefer external secrets manager; in DB store only token reference/metadata (expires_at, rotated_at, scopes, status). If tokens must be in DB: encrypt via `pgcrypto` and RLS by user_id; never log PII.
+[10] Ingest bookkeeping: `ingest_runs(id ULID, user_id, started_at, completed_at, status ENUM('ok','rate_limited','error'), since_id BIGINT, fetched_count INT, retried INT, rate_limit_hits INT, err_text TEXT)`; index (user_id, started_at DESC); compute/persist `first_visible_at`.
+[11] Canonical URL stored in `posts.url` with CHECK `url ~ '^https?://(x|twitter)\\.com/.+/status/\\d+'`; index `(user_id, conversation_id)` for timeline view.
+[12] Internal PKs use ULIDs (time-sortable) for `qa_messages.id`, `ingest_runs.id` (BIGSERIAL acceptable fallback).
+[13] Use only hard deletes; cascade where appropriate (e.g., deleting a `qa_message` deletes its `qa_sources`).
+[14] Ignore budget tracking; do not store budget/cost data.
+[15] Ops telemetry is not stored in the DB.
+[16] Baseline indexes for MVP: on `posts` BTREE `(user_id, published_at DESC)` and GIN on `(user_id, ts)`; on `qa_sources` BTREE `(qa_id)` and `(user_id, x_post_id)`; ingest is idempotent via `ON CONFLICT (user_id, x_post_id) DO NOTHING`.
+[17] No partitioning for MVP (may revisit later). </decisions>
+
+<matched_recommendations>
+[1] Per-user `posts` with PK `(user_id, x_post_id)` to simplify RLS and deletions — accepted.
+[2] BIGINT for all X IDs with positive-checks and per-user uniqueness — accepted.
+[3] Normalize `authors` globally; add user-scoped `user_following` for ingest boundaries — accepted.
+[4] `posts` schema including conversation/thread support, timestamps, `edited_seen` — accepted (modified to drop `lang`).
+[5] Media handling simplified: transcripts/summaries merged into `posts.text`; no `media` table — accepted.
+[6] Full-text search via `ts` tsvector (supports PL+EN) with GIN; no `lang` column — partially accepted (index confirmed; bilingual `ts` approach implied).
+[7] Q&A history tables (`qa_messages`, `qa_sources`) and pagination index — accepted.
+[8] RLS via `current_setting('app.user_id')` on all user-scoped tables; avoid BYPASSRLS — accepted.
+[9] Ingest bookkeeping with `ingest_runs` and SLO fields; index by started_at — accepted.
+[10] Canonical X URL CHECK and thread index on `(user_id, conversation_id)` — accepted.
+[11] ULIDs for internal PKs — accepted.
+[12] Baseline indexes (BTREE date, GIN FTS; join-covering indexes) and idempotent ingest `ON CONFLICT` — accepted.
+[13] Budget/cost tables — rejected (explicitly ignored).
+[14] Hard deletes over soft deletes — accepted.
+[15] External secrets manager with optional `pgcrypto` fallback — accepted.
+[16] No DB-stored ops telemetry — accepted.
+[17] No partitioning for MVP; revisit with scale — accepted.
+</matched_recommendations>
+
+<database_planning_summary>
+[Database planning summary]
+**Main DB requirements**:
+
+* Relational Postgres with strong per-user isolation (RLS).
+* Store only original posts from followed accounts; media text is embedded into `posts.text`.
+* Full-text search only, with date filtering; default Q&A horizon 24h but date range selectable.
+* History of Q&A with linkable sources (min 3 when available).
+* Operational ingest reliability tracking; no budget or user-behavior analytics stored.
+
+**Key entities & relationships**:
+
+* `users` (UUID, app-level) — implicit root of user-scoped data.
+* `authors` (global; `x_author_id BIGINT`, handle, display_name, last_seen_at).
+* `user_following` (user_id → x_author_id mapping) to define ingest scope.
+* `posts` (user-scoped; PK `(user_id, x_post_id)`; FK `author_id → authors`; fields for URL, text, timing, conversation_id, edited_seen).
+* `ingest_runs` (user-scoped; ULID PK; metrics/flags; since_id).
+* `qa_messages` (user-scoped; ULID PK; question/answer text and date bounds).
+* `qa_sources` (user-scoped; FK to `qa_messages` and to `(user_id, x_post_id)` in `posts`, UNIQUE per `qa_id, x_post_id`).
+
+**Security**:
+
+* RLS policies on all user-scoped tables using `current_setting('app.user_id')::uuid`.
+* Global tables (`authors`) have no RLS; access only via joins from RLS-filtered queries.
+* Secrets stored outside DB where possible; DB may hold only encrypted references/metadata; no PII in logs/telemetry.
+* Hard deletes only; cascade where needed.
+
+**Performance & scalability**:
+
+* FTS: `ts` tsvector indexed with GIN; recommended bilingual build (English + Polish) and `unaccent`.
+* Filtering: BTREE `(user_id, published_at DESC)` for recency; `(user_id, conversation_id)` for timeline.
+* Ingest idempotency: `ON CONFLICT (user_id, x_post_id) DO NOTHING`.
+* No partitions for MVP; revisit when volume justifies (e.g., tens of millions of rows).
+* ULIDs provide time-ordering for `qa_messages`/`ingest_runs` and simplify pagination.
+* `ingest_runs` supports SLO verification via `first_visible_at` on posts.
+
+**Data integrity**:
+
+* CHECK on canonical X URL shape.
+* FK consistency: `posts.author_id → authors`, `qa_sources(qa_id, user_id) → qa_messages`, `qa_sources(user_id, x_post_id) → posts`.
+* Unique constraints prevent duplicate posts per user.
+
+</database_planning_summary>
+
+<unresolved_issues>
+
+* Define how `ts` tsvector is generated without a `lang` column (e.g., combined English+Polish dictionaries, `unaccent`, and a generated column/trigger).
+* Confirm `users` table structure (UUID source, lifecycle) and whether to persist any X account metadata (handle at login) for joins/UI.
+* Decide on cascade rules for deleting a user: should it hard-delete all their `posts`, `qa_messages`, `qa_sources`, `ingest_runs`, and `user_following`?
+* Clarify maximum expected size of `posts.text` (since media transcripts are merged) and whether to cap/normalize before indexing to control `tsvector` bloat.
+* Specify how `since_id` is initialized for first backfill (24h default) and where the current watermark lives between runs (only in `ingest_runs` or also per-user/per-following).
+* Decide whether to store `conversation_id` NULLability and uniqueness expectations (e.g., can multiple authors share a conversation_id? Generally no, but DB does not enforce).
+* Define minimal app/database roles and privileges (service role vs. user role) and how `SET LOCAL app.user_id` is enforced per request (e.g., via middleware).
+* Confirm any retention policy for `posts` and `qa_history` (none in MVP, but state explicitly for ops).
+* Determine whether to store any author fields beyond handle/display_name (e.g., verified flag) for potential future filters (kept global).
+  </unresolved_issues>
+  </conversation_summary>

@@ -1,3 +1,11 @@
+package db
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
 // =============================================================================
 // Database Entity Models (for reference and mapping)
 // =============================================================================
@@ -19,16 +27,16 @@ type UserFollowing struct {
 
 // Post represents the posts table (user-scoped, RLS enabled)
 type Post struct {
-	UserID         uuid.UUID  `db:"user_id"`
-	XPostID        int64      `db:"x_post_id"`
-	AuthorID       int64      `db:"author_id"`
-	PublishedAt    time.Time  `db:"published_at"`
-	URL            string     `db:"url"`
-	Text           string     `db:"text"`
-	ConversationID *int64     `db:"conversation_id"` // Nullable in DB
-	IngestedAt     time.Time  `db:"ingested_at"`
-	FirstVisibleAt time.Time  `db:"first_visible_at"`
-	EditedSeen     bool       `db:"edited_seen"`
+	UserID         uuid.UUID `db:"user_id"`
+	XPostID        int64     `db:"x_post_id"`
+	AuthorID       int64     `db:"author_id"`
+	PublishedAt    time.Time `db:"published_at"`
+	URL            string    `db:"url"`
+	Text           string    `db:"text"`
+	ConversationID *int64    `db:"conversation_id"` // Nullable in DB
+	IngestedAt     time.Time `db:"ingested_at"`
+	FirstVisibleAt time.Time `db:"first_visible_at"`
+	EditedSeen     bool      `db:"edited_seen"`
 	// ts field (tsvector) not included as it's internal to PostgreSQL
 }
 
@@ -55,8 +63,8 @@ type IngestRun struct {
 	ID            string     `db:"id"` // ULID as string
 	UserID        uuid.UUID  `db:"user_id"`
 	StartedAt     time.Time  `db:"started_at"`
-	CompletedAt   *time.Time `db:"completed_at"`   // Nullable in DB
-	Status        string     `db:"status"`         // CHECK: 'ok', 'rate_limited', 'error'
+	CompletedAt   *time.Time `db:"completed_at"` // Nullable in DB
+	Status        string     `db:"status"`       // CHECK: 'ok', 'rate_limited', 'error'
 	SinceID       int64      `db:"since_id"`
 	FetchedCount  int        `db:"fetched_count"`
 	Retried       int        `db:"retried"`

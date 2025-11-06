@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -28,7 +29,7 @@ func NewQARepository(database *sqlx.DB) *QARepository {
 
 // CreateQA inserts a new Q&A message record within a transaction
 func (r *QARepository) CreateQA(ctx context.Context, tx *sqlx.Tx, qa db.QAMessage) error {
-	span := qaRepoTracer.Start(ctx, "CreateQA")
+	ctx, span := qaRepoTracer.Start(ctx, "CreateQA")
 	defer span.End()
 	
 	span.SetAttributes(
@@ -56,7 +57,7 @@ func (r *QARepository) CreateQASources(ctx context.Context, tx *sqlx.Tx, sources
 		return nil // No sources to insert
 	}
 	
-	span := qaRepoTracer.Start(ctx, "CreateQASources")
+	ctx, span := qaRepoTracer.Start(ctx, "CreateQASources")
 	defer span.End()
 	
 	span.SetAttributes(attribute.Int("source_count", len(sources)))
@@ -77,7 +78,7 @@ func (r *QARepository) CreateQASources(ctx context.Context, tx *sqlx.Tx, sources
 
 // GetQAByID retrieves a Q&A record with its sources
 func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID string) (*dto.QADetailDTO, error) {
-	span := qaRepoTracer.Start(ctx, "GetQAByID")
+	ctx, span := qaRepoTracer.Start(ctx, "GetQAByID")
 	defer span.End()
 	
 	span.SetAttributes(
@@ -161,8 +162,16 @@ func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID str
 }
 
 // mustParseTime is a helper to parse time strings (should not fail with valid DB data)
-func mustParseTime(s string) string {
-	// Database returns timestamps, we'll return them as-is for now
-	// In production, proper time parsing would be needed
-	return s
+func mustParseTime(s string) time.Time {
+	// Parse PostgreSQL timestamp format
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		// Try alternative format if RFC3339 fails
+		t, err = time.Parse("2006-01-02 15:04:05.999999-07", s)
+		if err != nil {
+			// If parsing still fails, panic as this indicates invalid DB data
+			panic(fmt.Sprintf("failed to parse time %q: %v", s, err))
+		}
+	}
+	return t
 }

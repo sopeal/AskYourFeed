@@ -51,27 +51,27 @@ func (s *QAService) CreateQA(
 	dateFrom time.Time,
 	dateTo time.Time,
 ) (*dto.QADetailDTO, error) {
-	span := qaServiceTracer.Start(ctx, "CreateQA")
+	ctx, span := qaServiceTracer.Start(ctx, "CreateQA")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("user_id", userID.String()),
 		attribute.String("date_from", dateFrom.Format(time.RFC3339)),
 		attribute.String("date_to", dateTo.Format(time.RFC3339)),
 	)
-	
+
 	// Step 1: Fetch posts from date range
 	posts, err := s.postRepo.GetPostsByDateRange(ctx, userID, dateFrom, dateTo)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to fetch posts: %w", err)
 	}
-	
+
 	span.SetAttributes(attribute.Int("posts_found", len(posts)))
-	
+
 	var answer string
 	var sourcePostIDs []int64
-	
+
 	// Step 2: Generate answer or use "no content" message
 	if len(posts) == 0 {
 		// No posts found - use predefined message
@@ -85,16 +85,16 @@ func (s *QAService) CreateQA(
 			return nil, fmt.Errorf("failed to generate answer: %w", err)
 		}
 	}
-	
+
 	// Step 3: Generate ULID for Q&A record
 	qaID := ulid.Make().String()
 	createdAt := time.Now()
-	
+
 	span.SetAttributes(
 		attribute.String("qa_id", qaID),
 		attribute.Int("source_count", len(sourcePostIDs)),
 	)
-	
+
 	// Step 4: Persist Q&A record in transaction
 	tx, err := s.database.BeginTxx(ctx, nil)
 	if err != nil {
@@ -102,7 +102,7 @@ func (s *QAService) CreateQA(
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback() // Rollback if not committed
-	
+
 	// Insert Q&A message
 	qaMessage := db.QAMessage{
 		ID:        qaID,
@@ -113,12 +113,12 @@ func (s *QAService) CreateQA(
 		DateTo:    dateTo,
 		CreatedAt: createdAt,
 	}
-	
+
 	if err := s.qaRepo.CreateQA(ctx, tx, qaMessage); err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to create Q&A record: %w", err)
 	}
-	
+
 	// Insert Q&A sources (if any)
 	if len(sourcePostIDs) > 0 {
 		sources := make([]db.QASource, len(sourcePostIDs))
@@ -129,22 +129,22 @@ func (s *QAService) CreateQA(
 				XPostID: postID,
 			}
 		}
-		
+
 		if err := s.qaRepo.CreateQASources(ctx, tx, sources); err != nil {
 			span.RecordError(err)
 			return nil, fmt.Errorf("failed to create Q&A sources: %w", err)
 		}
 	}
-	
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	// Step 5: Build response DTO with source details
 	sourceDTOs := s.buildSourceDTOs(posts, sourcePostIDs)
-	
+
 	response := &dto.QADetailDTO{
 		ID:        qaID,
 		Question:  question,
@@ -154,7 +154,7 @@ func (s *QAService) CreateQA(
 		CreatedAt: createdAt,
 		Sources:   sourceDTOs,
 	}
-	
+
 	return response, nil
 }
 
@@ -163,13 +163,13 @@ func (s *QAService) buildSourceDTOs(posts []repositories.PostWithAuthor, sourceP
 	if len(sourcePostIDs) == 0 {
 		return []dto.QASourceDTO{}
 	}
-	
+
 	// Create a map for quick lookup of source post IDs
 	sourceIDMap := make(map[int64]bool)
 	for _, id := range sourcePostIDs {
 		sourceIDMap[id] = true
 	}
-	
+
 	// Build DTOs for selected source posts
 	sourceDTOs := make([]dto.QASourceDTO, 0, len(sourcePostIDs))
 	for _, post := range posts {
@@ -178,13 +178,13 @@ func (s *QAService) buildSourceDTOs(posts []repositories.PostWithAuthor, sourceP
 			if post.DisplayName != nil && *post.DisplayName != "" {
 				displayName = *post.DisplayName
 			}
-			
+
 			// Create text preview (first 200 chars)
 			textPreview := post.Text
 			if len(textPreview) > 200 {
 				textPreview = textPreview[:200] + "..."
 			}
-			
+
 			sourceDTO := dto.QASourceDTO{
 				XPostID:           post.XPostID,
 				AuthorHandle:      post.Handle,
@@ -194,10 +194,10 @@ func (s *QAService) buildSourceDTOs(posts []repositories.PostWithAuthor, sourceP
 				TextPreview:       textPreview,
 				Text:              post.Text,
 			}
-			
+
 			sourceDTOs = append(sourceDTOs, sourceDTO)
 		}
 	}
-	
+
 	return sourceDTOs
 }

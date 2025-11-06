@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -36,22 +35,22 @@ func NewQAHandler(qaService *services.QAService) *QAHandler {
 func (h *QAHandler) CreateQA(c *gin.Context) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	
+
 	// Extract user_id from context (set by auth middleware)
 	userIDValue, exists := c.Get("user_id")
 	if !exists {
 		h.respondWithError(c, http.StatusUnauthorized, "UNAUTHORIZED", "Nieprawidłowy lub wygasły token sesji", nil)
 		return
 	}
-	
+
 	userID, ok := userIDValue.(uuid.UUID)
 	if !ok {
 		h.respondWithError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Invalid user ID format", nil)
 		return
 	}
-	
+
 	span.SetAttributes(attribute.String("user_id", userID.String()))
-	
+
 	// Bind and validate request body
 	var cmd dto.CreateQACommand
 	if err := c.ShouldBindJSON(&cmd); err != nil {
@@ -60,12 +59,12 @@ func (h *QAHandler) CreateQA(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	// Validate question field
 	if err := h.validator.Struct(cmd); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
 		details := make(map[string]interface{})
-		
+
 		for _, fieldErr := range validationErrors {
 			switch fieldErr.Field() {
 			case "Question":
@@ -76,32 +75,32 @@ func (h *QAHandler) CreateQA(c *gin.Context) {
 					return
 				} else if fieldErr.Tag() == "max" {
 					h.respondWithError(c, http.StatusBadRequest, "QUESTION_TOO_LONG", "Pytanie przekracza maksymalną długość 2000 znaków", map[string]interface{}{
-						"field": "question",
+						"field":      "question",
 						"max_length": 2000,
 					})
 					return
 				}
 			}
 		}
-		
+
 		h.respondWithError(c, http.StatusBadRequest, "INVALID_INPUT", "Walidacja nie powiodła się", details)
 		return
 	}
-	
+
 	// Apply date defaults
 	now := time.Now()
 	dateFrom := cmd.DateFrom
 	dateTo := cmd.DateTo
-	
+
 	if dateFrom == nil {
 		defaultFrom := now.Add(-24 * time.Hour)
 		dateFrom = &defaultFrom
 	}
-	
+
 	if dateTo == nil {
 		dateTo = &now
 	}
-	
+
 	// Validate date range
 	if dateFrom.After(*dateTo) {
 		h.respondWithError(c, http.StatusUnprocessableEntity, "INVALID_DATE_RANGE", "Data początkowa musi być wcześniejsza lub równa dacie końcowej", map[string]interface{}{
@@ -110,20 +109,20 @@ func (h *QAHandler) CreateQA(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	span.SetAttributes(
 		attribute.String("date_from", dateFrom.Format(time.RFC3339)),
 		attribute.String("date_to", dateTo.Format(time.RFC3339)),
 		attribute.Int("question_length", len(cmd.Question)),
 	)
-	
+
 	// Call service layer to create Q&A
 	qaDetail, err := h.qaService.CreateQA(ctx, userID, cmd.Question, *dateFrom, *dateTo)
 	if err != nil {
 		h.handleServiceError(c, err)
 		return
 	}
-	
+
 	// Return 201 Created with response
 	c.JSON(http.StatusCreated, qaDetail)
 }
@@ -144,9 +143,9 @@ func (h *QAHandler) respondWithError(c *gin.Context, statusCode int, code, messa
 func (h *QAHandler) handleServiceError(c *gin.Context, err error) {
 	ctx := c.Request.Context()
 	span := trace.SpanFromContext(ctx)
-	
+
 	span.RecordError(err)
-	
+
 	// Map service errors to HTTP status codes
 	switch err {
 	case services.ErrLLMUnavailable:

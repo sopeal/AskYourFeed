@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sopeal/AskYourFeed/internal/db"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
-	"time"
 )
 
 var postRepoTracer = otel.Tracer("post_repository")
@@ -38,15 +38,15 @@ func NewPostRepository(database *sqlx.DB) *PostRepository {
 // Returns posts ordered chronologically (published_at ASC)
 // Uses RLS to ensure user can only access their own posts
 func (r *PostRepository) GetPostsByDateRange(ctx context.Context, userID uuid.UUID, dateFrom, dateTo time.Time) ([]PostWithAuthor, error) {
-	span := postRepoTracer.Start(ctx, "GetPostsByDateRange")
+	ctx, span := postRepoTracer.Start(ctx, "GetPostsByDateRange")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("user_id", userID.String()),
 		attribute.String("date_from", dateFrom.Format(time.RFC3339)),
 		attribute.String("date_to", dateTo.Format(time.RFC3339)),
 	)
-	
+
 	query := `
 		SELECT 
 			p.user_id,
@@ -69,15 +69,15 @@ func (r *PostRepository) GetPostsByDateRange(ctx context.Context, userID uuid.UU
 		ORDER BY p.published_at ASC
 		LIMIT 100
 	`
-	
+
 	var posts []PostWithAuthor
 	err := r.db.SelectContext(ctx, &posts, query, userID, dateFrom, dateTo)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to fetch posts by date range: %w", err)
 	}
-	
+
 	span.SetAttributes(attribute.Int("post_count", len(posts)))
-	
+
 	return posts, nil
 }

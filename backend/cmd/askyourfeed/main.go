@@ -34,18 +34,21 @@ func main() {
 	postRepo := repositories.NewPostRepository(db)
 	qaRepo := repositories.NewQARepository(db)
 	ingestRepo := repositories.NewIngestRepository(db)
+	followingRepo := repositories.NewFollowingRepository(db)
 
 	// Initialize services
 	llmService := services.NewLLMService()
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	ingestService := services.NewIngestService(ingestRepo)
+	followingService := services.NewFollowingService(followingRepo)
 
 	// Initialize handlers
 	qaHandler := handlers.NewQAHandler(qaService)
 	ingestHandler := handlers.NewIngestHandler(ingestService)
+	followingHandler := handlers.NewFollowingHandler(followingService)
 
 	// Set up HTTP router
-	router := setupRouter(qaHandler, ingestHandler)
+	router := setupRouter(qaHandler, ingestHandler, followingHandler)
 
 	// Start HTTP server with graceful shutdown
 	srv := &http.Server{
@@ -123,7 +126,7 @@ func initDatabase(databaseURL string) (*sqlx.DB, error) {
 }
 
 // setupRouter configures the Gin router with routes and middleware
-func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHandler) *gin.Engine {
+func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHandler, followingHandler *handlers.FollowingHandler) *gin.Engine {
 	// Set Gin to release mode for production (can be overridden with GIN_MODE env var)
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -158,6 +161,13 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 		ingest.Use(authMiddleware()) // Apply auth middleware to ingest routes
 		{
 			ingest.GET("/status", ingestHandler.GetIngestStatus)
+		}
+
+		// Following endpoints (protected by auth middleware)
+		following := v1.Group("/following")
+		following.Use(authMiddleware()) // Apply auth middleware to following routes
+		{
+			following.GET("", followingHandler.GetFollowing) // Get list of followed authors
 		}
 	}
 

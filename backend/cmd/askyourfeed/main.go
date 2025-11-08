@@ -146,7 +146,11 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 		qa := v1.Group("/qa")
 		qa.Use(authMiddleware()) // Apply auth middleware to Q&A routes
 		{
-			qa.POST("", qaHandler.CreateQA)
+			qa.POST("", qaHandler.CreateQA)           // Create new Q&A
+			qa.GET("", qaHandler.ListQA)              // List Q&A history
+			qa.GET("/:id", qaHandler.GetQAByID)       // Get specific Q&A
+			qa.DELETE("/:id", qaHandler.DeleteQA)     // Delete specific Q&A
+			qa.DELETE("", qaHandler.DeleteAllQA)      // Delete all Q&A
 		}
 
 		// Ingest endpoints (protected by auth middleware)

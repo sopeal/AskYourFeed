@@ -201,3 +201,83 @@ func (s *QAService) buildSourceDTOs(posts []repositories.PostWithAuthor, sourceP
 
 	return sourceDTOs
 }
+
+// ListQA retrieves paginated Q&A history for a user
+func (s *QAService) ListQA(ctx context.Context, userID uuid.UUID, limit int, cursor string) (*dto.QAListResponseDTO, error) {
+	ctx, span := qaServiceTracer.Start(ctx, "ListQA")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("user_id", userID.String()),
+		attribute.Int("limit", limit),
+		attribute.String("cursor", cursor),
+	)
+
+	// Delegate to repository
+	result, err := s.qaRepo.ListQA(ctx, userID, limit, cursor)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to list Q&A: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetQAByID retrieves a specific Q&A interaction by ID
+func (s *QAService) GetQAByID(ctx context.Context, userID uuid.UUID, qaID string) (*dto.QADetailDTO, error) {
+	ctx, span := qaServiceTracer.Start(ctx, "GetQAByID")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("user_id", userID.String()),
+		attribute.String("qa_id", qaID),
+	)
+
+	// Delegate to repository
+	result, err := s.qaRepo.GetQAByID(ctx, userID, qaID)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to get Q&A by ID: %w", err)
+	}
+
+	return result, nil
+}
+
+// DeleteQA deletes a specific Q&A interaction
+func (s *QAService) DeleteQA(ctx context.Context, userID uuid.UUID, qaID string) error {
+	ctx, span := qaServiceTracer.Start(ctx, "DeleteQA")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("user_id", userID.String()),
+		attribute.String("qa_id", qaID),
+	)
+
+	// Delegate to repository
+	err := s.qaRepo.DeleteQA(ctx, userID, qaID)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to delete Q&A: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllQA deletes all Q&A interactions for a user
+func (s *QAService) DeleteAllQA(ctx context.Context, userID uuid.UUID) (int, error) {
+	ctx, span := qaServiceTracer.Start(ctx, "DeleteAllQA")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("user_id", userID.String()))
+
+	// Delegate to repository
+	deletedCount, err := s.qaRepo.DeleteAllQA(ctx, userID)
+	if err != nil {
+		span.RecordError(err)
+		return 0, fmt.Errorf("failed to delete all Q&A: %w", err)
+	}
+
+	span.SetAttributes(attribute.Int("deleted_count", deletedCount))
+
+	return deletedCount, nil
+}

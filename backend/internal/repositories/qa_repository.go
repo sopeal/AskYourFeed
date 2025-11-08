@@ -161,6 +161,175 @@ func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID str
 	}, nil
 }
 
+// ListQA retrieves paginated Q&A history for a user
+func (r *QARepository) ListQA(ctx context.Context, userID uuid.UUID, limit int, cursor string) (*dto.QAListResponseDTO, error) {
+	ctx, span := qaRepoTracer.Start(ctx, "ListQA")
+	defer span.End()
+	
+	span.SetAttributes(
+		attribute.String("user_id", userID.String()),
+		attribute.Int("limit", limit),
+		attribute.String("cursor", cursor),
+	)
+	
+	// Build query with optional cursor-based pagination
+	query := `
+		SELECT 
+			qa.id,
+			qa.question,
+			qa.answer,
+			qa.date_from,
+			qa.date_to,
+			qa.created_at,
+			COALESCE(COUNT(qs.x_post_id), 0) as sources_count
+		FROM qa_messages qa
+		LEFT JOIN qa_sources qs ON qa.id = qs.qa_id
+		WHERE qa.user_id = $1
+	`
+	
+	args := []interface{}{userID}
+	argIndex := 2
+	
+	// Add cursor condition if provided
+	if cursor != "" {
+		query += fmt.Sprintf(" AND qa.id < $%d", argIndex)
+		args = append(args, cursor)
+		argIndex++
+	}
+	
+	query += " GROUP BY qa.id, qa.question, qa.answer, qa.date_from, qa.date_to, qa.created_at"
+	query += " ORDER BY qa.created_at DESC"
+	query += fmt.Sprintf(" LIMIT $%d", argIndex)
+	args = append(args, limit+1) // Fetch one extra to determine if there are more
+	
+	type QARow struct {
+		ID           string    `db:"id"`
+		Question     string    `db:"question"`
+		Answer       string    `db:"answer"`
+		DateFrom     time.Time `db:"date_from"`
+		DateTo       time.Time `db:"date_to"`
+		CreatedAt    time.Time `db:"created_at"`
+		SourcesCount int       `db:"sources_count"`
+	}
+	
+	var rows []QARow
+	err := r.db.SelectContext(ctx, &rows, query, args...)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to list Q&A: %w", err)
+	}
+	
+	// Determine if there are more results
+	hasMore := len(rows) > limit
+	if hasMore {
+		rows = rows[:limit] // Trim to requested limit
+	}
+	
+	// Build response items
+	items := make([]dto.QAListItemDTO, len(rows))
+	for i, row := range rows {
+		// Create answer preview (first 200 chars)
+		answerPreview := row.Answer
+		if len(answerPreview) > 200 {
+			answerPreview = answerPreview[:200] + "..."
+		}
+		
+		items[i] = dto.QAListItemDTO{
+			ID:            row.ID,
+			Question:      row.Question,
+			AnswerPreview: answerPreview,
+			DateFrom:      row.DateFrom,
+			DateTo:        row.DateTo,
+			CreatedAt:     row.CreatedAt,
+			SourcesCount:  row.SourcesCount,
+		}
+	}
+	
+	// Determine next cursor
+	var nextCursor string
+	if hasMore && len(items) > 0 {
+		nextCursor = items[len(items)-1].ID
+	}
+	
+	span.SetAttributes(
+		attribute.Int("items_count", len(items)),
+		attribute.Bool("has_more", hasMore),
+	)
+	
+	return &dto.QAListResponseDTO{
+		Items:      items,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
+	}, nil
+}
+
+// DeleteQA deletes a specific Q&A message and its sources
+func (r *QARepository) DeleteQA(ctx context.Context, userID uuid.UUID, qaID string) error {
+	ctx, span := qaRepoTracer.Start(ctx, "DeleteQA")
+	defer span.End()
+	
+	span.SetAttributes(
+		attribute.String("qa_id", qaID),
+		attribute.String("user_id", userID.String()),
+	)
+	
+	// Delete Q&A message (sources will cascade delete due to FK)
+	query := `
+		DELETE FROM qa_messages
+		WHERE id = $1 AND user_id = $2
+	`
+	
+	result, err := r.db.ExecContext(ctx, query, qaID, userID)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to delete Q&A: %w", err)
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	
+	if rowsAffected == 0 {
+		return fmt.Errorf("Q&A not found")
+	}
+	
+	span.SetAttributes(attribute.Int64("rows_affected", rowsAffected))
+	
+	return nil
+}
+
+// DeleteAllQA deletes all Q&A messages for a user
+func (r *QARepository) DeleteAllQA(ctx context.Context, userID uuid.UUID) (int, error) {
+	ctx, span := qaRepoTracer.Start(ctx, "DeleteAllQA")
+	defer span.End()
+	
+	span.SetAttributes(attribute.String("user_id", userID.String()))
+	
+	// Delete all Q&A messages for user (sources will cascade delete)
+	query := `
+		DELETE FROM qa_messages
+		WHERE user_id = $1
+	`
+	
+	result, err := r.db.ExecContext(ctx, query, userID)
+	if err != nil {
+		span.RecordError(err)
+		return 0, fmt.Errorf("failed to delete all Q&A: %w", err)
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		span.RecordError(err)
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	
+	span.SetAttributes(attribute.Int64("rows_affected", rowsAffected))
+	
+	return int(rowsAffected), nil
+}
+
 // mustParseTime is a helper to parse time strings (should not fail with valid DB data)
 func mustParseTime(s string) time.Time {
 	// Parse PostgreSQL timestamp format

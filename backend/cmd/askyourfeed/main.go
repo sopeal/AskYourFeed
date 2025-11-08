@@ -33,16 +33,19 @@ func main() {
 	// Initialize repositories
 	postRepo := repositories.NewPostRepository(db)
 	qaRepo := repositories.NewQARepository(db)
+	ingestRepo := repositories.NewIngestRepository(db)
 
 	// Initialize services
 	llmService := services.NewLLMService()
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
+	ingestService := services.NewIngestService(ingestRepo)
 
 	// Initialize handlers
 	qaHandler := handlers.NewQAHandler(qaService)
+	ingestHandler := handlers.NewIngestHandler(ingestService)
 
 	// Set up HTTP router
-	router := setupRouter(qaHandler)
+	router := setupRouter(qaHandler, ingestHandler)
 
 	// Start HTTP server with graceful shutdown
 	srv := &http.Server{
@@ -120,7 +123,7 @@ func initDatabase(databaseURL string) (*sqlx.DB, error) {
 }
 
 // setupRouter configures the Gin router with routes and middleware
-func setupRouter(qaHandler *handlers.QAHandler) *gin.Engine {
+func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHandler) *gin.Engine {
 	// Set Gin to release mode for production (can be overridden with GIN_MODE env var)
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -144,6 +147,13 @@ func setupRouter(qaHandler *handlers.QAHandler) *gin.Engine {
 		qa.Use(authMiddleware()) // Apply auth middleware to Q&A routes
 		{
 			qa.POST("", qaHandler.CreateQA)
+		}
+
+		// Ingest endpoints (protected by auth middleware)
+		ingest := v1.Group("/ingest")
+		ingest.Use(authMiddleware()) // Apply auth middleware to ingest routes
+		{
+			ingest.GET("/status", ingestHandler.GetIngestStatus)
 		}
 	}
 

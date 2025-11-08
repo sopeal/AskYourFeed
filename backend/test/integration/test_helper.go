@@ -36,6 +36,11 @@ func NewTestRouter(db *sqlx.DB) *TestRouter {
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	qaHandler := handlers.NewQAHandler(qaService)
 
+	// Initialize Following dependencies
+	followingRepo := repositories.NewFollowingRepository(db)
+	followingService := services.NewFollowingService(followingRepo)
+	followingHandler := handlers.NewFollowingHandler(followingService)
+
 	// Setup routes with auth middleware
 	v1 := router.Group("/api/v1")
 	ingest := v1.Group("/ingest")
@@ -52,6 +57,12 @@ func NewTestRouter(db *sqlx.DB) *TestRouter {
 		qa.GET("/:id", qaHandler.GetQAByID)
 		qa.DELETE("/:id", qaHandler.DeleteQA)
 		qa.DELETE("", qaHandler.DeleteAllQA)
+	}
+
+	following := v1.Group("/following")
+	following.Use(testAuthMiddleware())
+	{
+		following.GET("", followingHandler.GetFollowing)
 	}
 
 	return &TestRouter{engine: router}
@@ -158,6 +169,27 @@ func (tdh *TestDataHelper) InsertAuthor(
 	_, err := tdh.db.Exec(query, xAuthorID, handle, displayName, lastSeenAt)
 	if err != nil {
 		t.Fatalf("Failed to insert test author: %v", err)
+	}
+}
+
+// InsertUserFollowing inserts a test user following relationship into the database
+func (tdh *TestDataHelper) InsertUserFollowing(
+	t *testing.T,
+	userID uuid.UUID,
+	xAuthorID int64,
+	lastCheckedAt *time.Time,
+) {
+	t.Helper()
+
+	query := `
+		INSERT INTO user_following (user_id, x_author_id, last_checked_at)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (user_id, x_author_id) DO NOTHING
+	`
+
+	_, err := tdh.db.Exec(query, userID, xAuthorID, lastCheckedAt)
+	if err != nil {
+		t.Fatalf("Failed to insert test user following: %v", err)
 	}
 }
 

@@ -64,6 +64,15 @@ CREATE TABLE IF NOT EXISTS authors (
     last_seen_at timestamptz
 );
 
+-- Create user-scoped table: user_following
+CREATE TABLE IF NOT EXISTS user_following (
+    user_id uuid NOT NULL,
+    x_author_id bigint NOT NULL,
+    last_checked_at timestamptz,
+    PRIMARY KEY (user_id, x_author_id),
+    FOREIGN KEY (x_author_id) REFERENCES authors(x_author_id) ON DELETE CASCADE
+);
+
 -- Create user-scoped table: ingest_runs
 CREATE TABLE IF NOT EXISTS ingest_runs (
     id char(26) PRIMARY KEY,
@@ -125,18 +134,23 @@ CREATE TABLE IF NOT EXISTS qa_sources (
 );
 
 -- Enable row-level security and create policies for user-scoped tables
+ALTER TABLE user_following ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ingest_runs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE posts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE qa_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE qa_sources ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if they exist
+DROP POLICY IF EXISTS user_isolation_user_following ON user_following;
 DROP POLICY IF EXISTS user_isolation_ingest_runs ON ingest_runs;
 DROP POLICY IF EXISTS user_isolation_posts ON posts;
 DROP POLICY IF EXISTS user_isolation_qa_messages ON qa_messages;
 DROP POLICY IF EXISTS user_isolation_qa_sources ON qa_sources;
 
 -- Create policies for user-scoped tables
+CREATE POLICY user_isolation_user_following ON user_following
+    USING (user_id = current_setting('app.user_id', true)::uuid);
+
 CREATE POLICY user_isolation_ingest_runs ON ingest_runs
     USING (user_id = current_setting('app.user_id', true)::uuid);
 

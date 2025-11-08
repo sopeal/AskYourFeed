@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -227,7 +228,7 @@ func (h *QAHandler) GetQAByID(c *gin.Context) {
 	result, err := h.qaService.GetQAByID(ctx, userID, qaID)
 	if err != nil {
 		// Check if it's a "not found" error
-		if err.Error() == "sql: no rows in result set" || err.Error() == "failed to fetch Q&A message: sql: no rows in result set" {
+		if errors.Is(err, services.ErrQANotFound) {
 			h.respondWithError(c, http.StatusNotFound, "NOT_FOUND", "Q&A o podanym ID nie zostało znalezione lub nie należy do użytkownika", nil)
 			return
 		}
@@ -273,7 +274,7 @@ func (h *QAHandler) DeleteQA(c *gin.Context) {
 	err := h.qaService.DeleteQA(ctx, userID, qaID)
 	if err != nil {
 		// Check if it's a "not found" error
-		if err.Error() == "failed to delete Q&A: Q&A not found" {
+		if errors.Is(err, services.ErrQANotFound) {
 			h.respondWithError(c, http.StatusNotFound, "NOT_FOUND", "Q&A o podanym ID nie zostało znalezione lub nie należy do użytkownika", nil)
 			return
 		}

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -16,6 +17,11 @@ import (
 )
 
 var qaServiceTracer = otel.Tracer("qa_service")
+
+// Common errors
+var (
+	ErrQANotFound = errors.New("Q&A not found")
+)
 
 const noContentMessage = "Brak treści w wybranym zakresie dat. Spróbuj rozszerzyć zakres dat."
 
@@ -237,6 +243,9 @@ func (s *QAService) GetQAByID(ctx context.Context, userID uuid.UUID, qaID string
 	result, err := s.qaRepo.GetQAByID(ctx, userID, qaID)
 	if err != nil {
 		span.RecordError(err)
+		if errors.Is(err, repositories.ErrQANotFound) {
+			return nil, ErrQANotFound
+		}
 		return nil, fmt.Errorf("failed to get Q&A by ID: %w", err)
 	}
 
@@ -257,6 +266,9 @@ func (s *QAService) DeleteQA(ctx context.Context, userID uuid.UUID, qaID string)
 	err := s.qaRepo.DeleteQA(ctx, userID, qaID)
 	if err != nil {
 		span.RecordError(err)
+		if errors.Is(err, repositories.ErrQANotFound) {
+			return ErrQANotFound
+		}
 		return fmt.Errorf("failed to delete Q&A: %w", err)
 	}
 

@@ -2,6 +2,8 @@ package repositories
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +16,11 @@ import (
 )
 
 var qaRepoTracer = otel.Tracer("qa_repository")
+
+// Common repository errors
+var (
+	ErrQANotFound = errors.New("Q&A not found")
+)
 
 // QARepository handles Q&A data access operations
 type QARepository struct {
@@ -31,23 +38,23 @@ func NewQARepository(database *sqlx.DB) *QARepository {
 func (r *QARepository) CreateQA(ctx context.Context, tx *sqlx.Tx, qa db.QAMessage) error {
 	ctx, span := qaRepoTracer.Start(ctx, "CreateQA")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("qa_id", qa.ID),
 		attribute.String("user_id", qa.UserID.String()),
 	)
-	
+
 	query := `
 		INSERT INTO qa_messages (id, user_id, question, answer, date_from, date_to, created_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
-	
+
 	_, err := tx.ExecContext(ctx, query, qa.ID, qa.UserID, qa.Question, qa.Answer, qa.DateFrom, qa.DateTo, qa.CreatedAt)
 	if err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("failed to insert Q&A message: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -56,23 +63,23 @@ func (r *QARepository) CreateQASources(ctx context.Context, tx *sqlx.Tx, sources
 	if len(sources) == 0 {
 		return nil // No sources to insert
 	}
-	
+
 	ctx, span := qaRepoTracer.Start(ctx, "CreateQASources")
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.Int("source_count", len(sources)))
-	
+
 	query := `
 		INSERT INTO qa_sources (qa_id, user_id, x_post_id)
 		VALUES (:qa_id, :user_id, :x_post_id)
 	`
-	
+
 	_, err := tx.NamedExecContext(ctx, query, sources)
 	if err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("failed to insert Q&A sources: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -80,12 +87,12 @@ func (r *QARepository) CreateQASources(ctx context.Context, tx *sqlx.Tx, sources
 func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID string) (*dto.QADetailDTO, error) {
 	ctx, span := qaRepoTracer.Start(ctx, "GetQAByID")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("qa_id", qaID),
 		attribute.String("user_id", userID.String()),
 	)
-	
+
 	// First, get the Q&A message
 	var qa db.QAMessage
 	qaQuery := `
@@ -93,13 +100,16 @@ func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID str
 		FROM qa_messages
 		WHERE id = $1 AND user_id = $2
 	`
-	
+
 	err := r.db.GetContext(ctx, &qa, qaQuery, qaID, userID)
 	if err != nil {
 		span.RecordError(err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrQANotFound
+		}
 		return nil, fmt.Errorf("failed to fetch Q&A message: %w", err)
 	}
-	
+
 	// Then, get the sources with post and author information
 	sourcesQuery := `
 		SELECT 
@@ -115,7 +125,7 @@ func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID str
 		WHERE qs.qa_id = $1 AND qs.user_id = $2
 		ORDER BY p.published_at ASC
 	`
-	
+
 	type SourceRow struct {
 		XPostID     int64   `db:"x_post_id"`
 		Handle      string  `db:"handle"`
@@ -124,14 +134,14 @@ func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID str
 		URL         string  `db:"url"`
 		Text        string  `db:"text"`
 	}
-	
+
 	var sourceRows []SourceRow
 	err = r.db.SelectContext(ctx, &sourceRows, sourcesQuery, qaID, userID)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to fetch Q&A sources: %w", err)
 	}
-	
+
 	// Build response DTO
 	sources := make([]dto.QASourceDTO, len(sourceRows))
 	for i, row := range sourceRows {
@@ -139,7 +149,7 @@ func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID str
 		if row.DisplayName != nil {
 			displayName = *row.DisplayName
 		}
-		
+
 		sources[i] = dto.QASourceDTO{
 			XPostID:           row.XPostID,
 			AuthorHandle:      row.Handle,
@@ -149,7 +159,7 @@ func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID str
 			Text:              row.Text,
 		}
 	}
-	
+
 	return &dto.QADetailDTO{
 		ID:        qa.ID,
 		Question:  qa.Question,
@@ -165,13 +175,13 @@ func (r *QARepository) GetQAByID(ctx context.Context, userID uuid.UUID, qaID str
 func (r *QARepository) ListQA(ctx context.Context, userID uuid.UUID, limit int, cursor string) (*dto.QAListResponseDTO, error) {
 	ctx, span := qaRepoTracer.Start(ctx, "ListQA")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("user_id", userID.String()),
 		attribute.Int("limit", limit),
 		attribute.String("cursor", cursor),
 	)
-	
+
 	// Build query with optional cursor-based pagination
 	query := `
 		SELECT 
@@ -186,22 +196,22 @@ func (r *QARepository) ListQA(ctx context.Context, userID uuid.UUID, limit int, 
 		LEFT JOIN qa_sources qs ON qa.id = qs.qa_id
 		WHERE qa.user_id = $1
 	`
-	
+
 	args := []interface{}{userID}
 	argIndex := 2
-	
+
 	// Add cursor condition if provided
 	if cursor != "" {
 		query += fmt.Sprintf(" AND qa.id < $%d", argIndex)
 		args = append(args, cursor)
 		argIndex++
 	}
-	
+
 	query += " GROUP BY qa.id, qa.question, qa.answer, qa.date_from, qa.date_to, qa.created_at"
 	query += " ORDER BY qa.created_at DESC"
 	query += fmt.Sprintf(" LIMIT $%d", argIndex)
 	args = append(args, limit+1) // Fetch one extra to determine if there are more
-	
+
 	type QARow struct {
 		ID           string    `db:"id"`
 		Question     string    `db:"question"`
@@ -211,20 +221,20 @@ func (r *QARepository) ListQA(ctx context.Context, userID uuid.UUID, limit int, 
 		CreatedAt    time.Time `db:"created_at"`
 		SourcesCount int       `db:"sources_count"`
 	}
-	
+
 	var rows []QARow
 	err := r.db.SelectContext(ctx, &rows, query, args...)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to list Q&A: %w", err)
 	}
-	
+
 	// Determine if there are more results
 	hasMore := len(rows) > limit
 	if hasMore {
 		rows = rows[:limit] // Trim to requested limit
 	}
-	
+
 	// Build response items
 	items := make([]dto.QAListItemDTO, len(rows))
 	for i, row := range rows {
@@ -233,7 +243,7 @@ func (r *QARepository) ListQA(ctx context.Context, userID uuid.UUID, limit int, 
 		if len(answerPreview) > 200 {
 			answerPreview = answerPreview[:200] + "..."
 		}
-		
+
 		items[i] = dto.QAListItemDTO{
 			ID:            row.ID,
 			Question:      row.Question,
@@ -244,18 +254,18 @@ func (r *QARepository) ListQA(ctx context.Context, userID uuid.UUID, limit int, 
 			SourcesCount:  row.SourcesCount,
 		}
 	}
-	
+
 	// Determine next cursor
 	var nextCursor string
 	if hasMore && len(items) > 0 {
 		nextCursor = items[len(items)-1].ID
 	}
-	
+
 	span.SetAttributes(
 		attribute.Int("items_count", len(items)),
 		attribute.Bool("has_more", hasMore),
 	)
-	
+
 	return &dto.QAListResponseDTO{
 		Items:      items,
 		NextCursor: nextCursor,
@@ -267,36 +277,36 @@ func (r *QARepository) ListQA(ctx context.Context, userID uuid.UUID, limit int, 
 func (r *QARepository) DeleteQA(ctx context.Context, userID uuid.UUID, qaID string) error {
 	ctx, span := qaRepoTracer.Start(ctx, "DeleteQA")
 	defer span.End()
-	
+
 	span.SetAttributes(
 		attribute.String("qa_id", qaID),
 		attribute.String("user_id", userID.String()),
 	)
-	
+
 	// Delete Q&A message (sources will cascade delete due to FK)
 	query := `
 		DELETE FROM qa_messages
 		WHERE id = $1 AND user_id = $2
 	`
-	
+
 	result, err := r.db.ExecContext(ctx, query, qaID, userID)
 	if err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("failed to delete Q&A: %w", err)
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
-	
+
 	if rowsAffected == 0 {
-		return fmt.Errorf("Q&A not found")
+		return ErrQANotFound
 	}
-	
+
 	span.SetAttributes(attribute.Int64("rows_affected", rowsAffected))
-	
+
 	return nil
 }
 
@@ -304,29 +314,29 @@ func (r *QARepository) DeleteQA(ctx context.Context, userID uuid.UUID, qaID stri
 func (r *QARepository) DeleteAllQA(ctx context.Context, userID uuid.UUID) (int, error) {
 	ctx, span := qaRepoTracer.Start(ctx, "DeleteAllQA")
 	defer span.End()
-	
+
 	span.SetAttributes(attribute.String("user_id", userID.String()))
-	
+
 	// Delete all Q&A messages for user (sources will cascade delete)
 	query := `
 		DELETE FROM qa_messages
 		WHERE user_id = $1
 	`
-	
+
 	result, err := r.db.ExecContext(ctx, query, userID)
 	if err != nil {
 		span.RecordError(err)
 		return 0, fmt.Errorf("failed to delete all Q&A: %w", err)
 	}
-	
+
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		span.RecordError(err)
 		return 0, fmt.Errorf("failed to get rows affected: %w", err)
 	}
-	
+
 	span.SetAttributes(attribute.Int64("rows_affected", rowsAffected))
-	
+
 	return int(rowsAffected), nil
 }
 

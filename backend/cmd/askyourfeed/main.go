@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/sopeal/AskYourFeed/internal/handlers"
 	"github.com/sopeal/AskYourFeed/internal/repositories"
 	"github.com/sopeal/AskYourFeed/internal/services"
+	"golang.org/x/oauth2"
 )
 
 func main() {
@@ -35,20 +35,35 @@ func main() {
 	qaRepo := repositories.NewQARepository(db)
 	ingestRepo := repositories.NewIngestRepository(db)
 	followingRepo := repositories.NewFollowingRepository(db)
+	authRepo := repositories.NewAuthRepository(db)
+
+	// Initialize OAuth2 config
+	oauthConfig := &oauth2.Config{
+		ClientID:     config.XClientID,
+		ClientSecret: config.XClientSecret,
+		RedirectURL:  config.BaseURL + "/api/v1/auth/callback",
+		Scopes:       []string{"tweet.read", "users.read", "follows.read", "offline.access"},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "https://twitter.com/i/oauth2/authorize",
+			TokenURL: "https://api.twitter.com/2/oauth2/token",
+		},
+	}
 
 	// Initialize services
 	llmService := services.NewLLMService()
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	ingestService := services.NewIngestService(ingestRepo)
 	followingService := services.NewFollowingService(followingRepo)
+	authService := services.NewAuthService(authRepo, oauthConfig, config.EncryptionKey, config.BaseURL)
 
 	// Initialize handlers
 	qaHandler := handlers.NewQAHandler(qaService)
 	ingestHandler := handlers.NewIngestHandler(ingestService)
 	followingHandler := handlers.NewFollowingHandler(followingService)
+	authHandler := handlers.NewAuthHandler(authService)
 
 	// Set up HTTP router
-	router := setupRouter(qaHandler, ingestHandler, followingHandler)
+	router := setupRouter(qaHandler, ingestHandler, followingHandler, authHandler, authService)
 
 	// Start HTTP server with graceful shutdown
 	srv := &http.Server{
@@ -84,15 +99,23 @@ func main() {
 
 // Config holds application configuration
 type Config struct {
-	Port        string
-	DatabaseURL string
+	Port          string
+	DatabaseURL   string
+	XClientID     string
+	XClientSecret string
+	EncryptionKey string
+	BaseURL       string
 }
 
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
 	return Config{
-		Port:        getEnv("PORT", "8080"),
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
+		Port:          getEnv("PORT", "8080"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
+		XClientID:     getEnv("X_CLIENT_ID", ""),
+		XClientSecret: getEnv("X_CLIENT_SECRET", ""),
+		EncryptionKey: getEnv("ENCRYPTION_KEY", "default-encryption-key-change-in-production"),
+		BaseURL:       getEnv("BASE_URL", "http://localhost:8080"),
 	}
 }
 
@@ -126,7 +149,7 @@ func initDatabase(databaseURL string) (*sqlx.DB, error) {
 }
 
 // setupRouter configures the Gin router with routes and middleware
-func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHandler, followingHandler *handlers.FollowingHandler) *gin.Engine {
+func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHandler, followingHandler *handlers.FollowingHandler, authHandler *handlers.AuthHandler, authService *services.AuthService) *gin.Engine {
 	// Set Gin to release mode for production (can be overridden with GIN_MODE env var)
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -145,27 +168,42 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
+		// Auth endpoints (public)
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/login", authHandler.InitiateLogin)    // Initiate OAuth login
+			auth.GET("/callback", authHandler.HandleCallback) // OAuth callback
+			auth.POST("/logout", authHandler.Logout)          // Logout
+		}
+
+		// Session endpoint (protected)
+		session := v1.Group("/session")
+		session.Use(authMiddleware(authService)) // Apply auth middleware
+		{
+			session.GET("/current", authHandler.GetCurrentSession) // Get current session
+		}
+
 		// Q&A endpoints (protected by auth middleware)
 		qa := v1.Group("/qa")
-		qa.Use(authMiddleware()) // Apply auth middleware to Q&A routes
+		qa.Use(authMiddleware(authService)) // Apply auth middleware to Q&A routes
 		{
-			qa.POST("", qaHandler.CreateQA)           // Create new Q&A
-			qa.GET("", qaHandler.ListQA)              // List Q&A history
-			qa.GET("/:id", qaHandler.GetQAByID)       // Get specific Q&A
-			qa.DELETE("/:id", qaHandler.DeleteQA)     // Delete specific Q&A
-			qa.DELETE("", qaHandler.DeleteAllQA)      // Delete all Q&A
+			qa.POST("", qaHandler.CreateQA)       // Create new Q&A
+			qa.GET("", qaHandler.ListQA)          // List Q&A history
+			qa.GET("/:id", qaHandler.GetQAByID)   // Get specific Q&A
+			qa.DELETE("/:id", qaHandler.DeleteQA) // Delete specific Q&A
+			qa.DELETE("", qaHandler.DeleteAllQA)  // Delete all Q&A
 		}
 
 		// Ingest endpoints (protected by auth middleware)
 		ingest := v1.Group("/ingest")
-		ingest.Use(authMiddleware()) // Apply auth middleware to ingest routes
+		ingest.Use(authMiddleware(authService)) // Apply auth middleware to ingest routes
 		{
 			ingest.GET("/status", ingestHandler.GetIngestStatus)
 		}
 
 		// Following endpoints (protected by auth middleware)
 		following := v1.Group("/following")
-		following.Use(authMiddleware()) // Apply auth middleware to following routes
+		following.Use(authMiddleware(authService)) // Apply auth middleware to following routes
 		{
 			following.GET("", followingHandler.GetFollowing) // Get list of followed authors
 		}
@@ -183,32 +221,53 @@ func healthCheckHandler(c *gin.Context) {
 	})
 }
 
-// authMiddleware is a placeholder for authentication middleware
-// In production, this would validate session tokens and extract user_id
-func authMiddleware() gin.HandlerFunc {
+// authMiddleware validates session tokens and extracts user_id
+func authMiddleware(authService *services.AuthService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// TODO: Implement actual session validation
-		// For now, we'll use a mock user_id for development/testing
+		ctx := c.Request.Context()
 
-		// Extract Authorization header
+		// Extract session token from Authorization header or cookie
+		var sessionToken string
+
+		// Try Authorization header first
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			sessionToken = authHeader[7:]
+		}
+
+		// Try session_token cookie if no header
+		if sessionToken == "" {
+			if cookie, err := c.Cookie("session_token"); err == nil && cookie != "" {
+				sessionToken = cookie
+			}
+		}
+
+		if sessionToken == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
 					"code":    "UNAUTHORIZED",
-					"message": "Missing authorization header",
+					"message": "Brak tokena sesji",
 				},
 			})
 			c.Abort()
 			return
 		}
 
-		// In production, validate the Bearer token and extract user_id from session
-		// For now, use a mock user_id (this MUST be replaced with real auth)
-		mockUserID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+		// Validate session token
+		userID, err := authService.ValidateSession(ctx, sessionToken)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": gin.H{
+					"code":    "INVALID_SESSION",
+					"message": "Nieprawidłowa lub wygasła sesja",
+				},
+			})
+			c.Abort()
+			return
+		}
 
 		// Set user_id in context for handlers to use
-		c.Set("user_id", mockUserID)
+		c.Set("user_id", userID)
 		c.Next()
 	}
 }

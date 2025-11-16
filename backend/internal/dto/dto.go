@@ -7,6 +7,26 @@ import (
 )
 
 // =============================================================================
+// Auth DTOs
+// =============================================================================
+
+// AuthInitiateResponseDTO represents response from login initiation
+// Contains OAuth authorization URL and state token
+type AuthInitiateResponseDTO struct {
+	AuthURL string `json:"auth_url"` // X OAuth authorization URL
+	State   string `json:"state"`    // CSRF protection token
+}
+
+// AuthCallbackResponseDTO represents response from OAuth callback
+// Contains session token and user information
+type AuthCallbackResponseDTO struct {
+	SessionToken string    `json:"session_token"` // Session token for API authentication
+	UserID       uuid.UUID `json:"user_id"`       // Internal user ID
+	XHandle      string    `json:"x_handle"`      // X (Twitter) username
+	RedirectURL  string    `json:"redirect_url"`  // Frontend redirect URL
+}
+
+// =============================================================================
 // Session DTOs
 // =============================================================================
 

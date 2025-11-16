@@ -41,10 +41,11 @@ db-start: ## Start PostgreSQL container
 	@docker exec $(DB_CONTAINER) pg_isready -U $(DB_USER) || sleep 2
 	@echo "$(GREEN)PostgreSQL is ready!$(NC)"
 
-db-init: db-start ## Initialize database with schema migration
+db-init: db-start ## Initialize database with schema migrations
 	@echo "$(GREEN)Initializing database schema...$(NC)"
 	@sleep 2
 	@docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) < $(MIGRATION_FILE)
+	@docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) < db/20251111235200_add_auth_tables.sql
 	@echo "$(GREEN)Database schema initialized successfully!$(NC)"
 
 db-stop: ## Stop PostgreSQL container

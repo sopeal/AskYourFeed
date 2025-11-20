@@ -184,3 +184,25 @@ type ErrorDetailDTO struct {
 	Message string                 `json:"message"`           // Human-readable error message in Polish
 	Details map[string]interface{} `json:"details,omitempty"` // Additional error context
 }
+
+// =============================================================================
+// Twitter API DTOs
+// =============================================================================
+
+// TweetDTO represents tweet data from Twitter API
+type TweetDTO struct {
+	ID             int64     `json:"id"`
+	AuthorID       int64     `json:"author_id"`
+	Text           string    `json:"text"`
+	URL            string    `json:"url"`
+	PublishedAt    time.Time `json:"published_at"`
+	ConversationID int64     `json:"conversation_id"`
+}
+
+// UserDTO represents user data from Twitter API
+type UserDTO struct {
+	ID          int64     `json:"id"`
+	Handle      string    `json:"handle"`
+	DisplayName string    `json:"display_name"`
+	LastSeenAt  time.Time `json:"last_seen_at"`
+}

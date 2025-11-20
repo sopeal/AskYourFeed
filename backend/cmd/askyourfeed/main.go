@@ -35,6 +35,7 @@ func main() {
 	qaRepo := repositories.NewQARepository(db)
 	ingestRepo := repositories.NewIngestRepository(db)
 	followingRepo := repositories.NewFollowingRepository(db)
+	authorRepo := repositories.NewAuthorRepository(db)
 
 	// Initialize services
 	llmService := services.NewLLMService()
@@ -42,9 +43,21 @@ func main() {
 	ingestService := services.NewIngestService(ingestRepo)
 	followingService := services.NewFollowingService(followingRepo)
 
+	// Initialize Twitter API client
+	twitterClient := services.NewTwitterClient(config.TwitterAPIKey)
+
+	// Initialize ingestion service
+	ingestionService := services.NewIngestionService(
+		twitterClient,
+		ingestRepo,
+		followingRepo,
+		postRepo,
+		authorRepo,
+	)
+
 	// Initialize handlers
 	qaHandler := handlers.NewQAHandler(qaService)
-	ingestHandler := handlers.NewIngestHandler(ingestService)
+	ingestHandler := handlers.NewIngestHandler(ingestService, ingestionService)
 	followingHandler := handlers.NewFollowingHandler(followingService)
 
 	// Set up HTTP router
@@ -84,15 +97,17 @@ func main() {
 
 // Config holds application configuration
 type Config struct {
-	Port        string
-	DatabaseURL string
+	Port         string
+	DatabaseURL  string
+	TwitterAPIKey string
 }
 
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
 	return Config{
-		Port:        getEnv("PORT", "8080"),
-		DatabaseURL: getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
+		Port:          getEnv("PORT", "8080"),
+		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
+		TwitterAPIKey: getEnv("TWITTER_API_KEY", ""),
 	}
 }
 
@@ -161,6 +176,7 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 		ingest.Use(authMiddleware()) // Apply auth middleware to ingest routes
 		{
 			ingest.GET("/status", ingestHandler.GetIngestStatus)
+			ingest.POST("/trigger", ingestHandler.TriggerIngest)
 		}
 
 		// Following endpoints (protected by auth middleware)

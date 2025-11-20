@@ -66,8 +66,8 @@ func (r *IngestRepository) GetCurrentRun(ctx context.Context, userID uuid.UUID) 
 	span.SetAttributes(attribute.String("user_id", userID.String()))
 
 	query := `
-		SELECT id, user_id, started_at, completed_at, status, since_id, 
-		       fetched_count, retried, rate_limit_hits, err_text
+		SELECT id, user_id, started_at, completed_at, status, cursor,
+		       last_cursor, fetched_count, retried, rate_limit_hits, err_text
 		FROM ingest_runs
 		WHERE user_id = $1 AND completed_at IS NULL
 		ORDER BY started_at DESC
@@ -100,8 +100,8 @@ func (r *IngestRepository) GetRecentRuns(ctx context.Context, userID uuid.UUID, 
 	)
 
 	query := `
-		SELECT id, user_id, started_at, completed_at, status, since_id,
-		       fetched_count, retried, rate_limit_hits, err_text
+		SELECT id, user_id, started_at, completed_at, status, cursor,
+		       last_cursor, fetched_count, retried, rate_limit_hits, err_text
 		FROM ingest_runs
 		WHERE user_id = $1 AND completed_at IS NOT NULL
 		ORDER BY started_at DESC
@@ -123,4 +123,91 @@ func (r *IngestRepository) GetRecentRuns(ctx context.Context, userID uuid.UUID, 
 	span.SetAttributes(attribute.Int("runs_found", len(runs)))
 
 	return runs, nil
+}
+
+// CreateIngestRun creates a new ingest run with cursor-based pagination
+func (r *IngestRepository) CreateIngestRun(ctx context.Context, userID uuid.UUID, runID string, lastCursor string) error {
+	ctx, span := ingestRepoTracer.Start(ctx, "CreateIngestRun")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("user_id", userID.String()),
+		attribute.String("run_id", runID),
+		attribute.String("last_cursor", lastCursor),
+	)
+
+	query := `
+		INSERT INTO ingest_runs (id, user_id, started_at, status, cursor, last_cursor, fetched_count, retried, rate_limit_hits)
+		VALUES ($1, $2, NOW(), 'ok', '', $3, 0, 0, 0)
+	`
+
+	_, err := r.db.ExecContext(ctx, query, runID, userID, lastCursor)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to create ingest run: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateIngestRunCursor updates the cursor for an ongoing ingest run
+func (r *IngestRepository) UpdateIngestRunCursor(ctx context.Context, runID string, cursor string, fetchedCount int) error {
+	ctx, span := ingestRepoTracer.Start(ctx, "UpdateIngestRunCursor")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("run_id", runID),
+		attribute.String("cursor", cursor),
+		attribute.Int("fetched_count", fetchedCount),
+	)
+
+	query := `
+		UPDATE ingest_runs
+		SET cursor = $2, fetched_count = $3
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, runID, cursor, fetchedCount)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to update ingest run cursor: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("ingest run not found: %s", runID)
+	}
+
+	return nil
+}
+
+// CompleteIngestRun marks an ingest run as completed
+func (r *IngestRepository) CompleteIngestRun(ctx context.Context, runID string, status string, finalFetchedCount int, errText *string) error {
+	ctx, span := ingestRepoTracer.Start(ctx, "CompleteIngestRun")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("run_id", runID),
+		attribute.String("status", status),
+		attribute.Int("final_fetched_count", finalFetchedCount),
+	)
+
+	query := `
+		UPDATE ingest_runs
+		SET completed_at = NOW(), status = $2, fetched_count = $3, err_text = $4
+		WHERE id = $1
+	`
+
+	_, err := r.db.ExecContext(ctx, query, runID, status, finalFetchedCount, errText)
+	if err != nil {
+		span.RecordError(err)
+		return fmt.Errorf("failed to complete ingest run: %w", err)
+	}
+
+	return nil
 }

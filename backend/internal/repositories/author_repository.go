@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sopeal/AskYourFeed/internal/db"
 	"github.com/sopeal/AskYourFeed/internal/dto"

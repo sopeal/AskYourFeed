@@ -26,37 +26,19 @@ func NewFollowingService(followingRepo *repositories.FollowingRepository) *Follo
 }
 
 // GetFollowing retrieves paginated list of authors the user follows
-func (s *FollowingService) GetFollowing(ctx context.Context, userID uuid.UUID, limit int, cursor *int64) (*dto.FollowingListResponseDTO, error) {
+func (s *FollowingService) GetFollowing(ctx context.Context, userID uuid.UUID) (*dto.FollowingListResponseDTO, error) {
 	ctx, span := followingServiceTracer.Start(ctx, "GetFollowing")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("user_id", userID.String()),
-		attribute.Int("limit", limit),
 	)
-	if cursor != nil {
-		span.SetAttributes(attribute.Int64("cursor", *cursor))
-	}
 
 	// Fetch one extra item to determine if there are more pages
-	items, err := s.followingRepo.GetFollowing(ctx, userID, limit+1, cursor)
+	items, err := s.followingRepo.GetFollowing(ctx, userID)
 	if err != nil {
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to get following list: %w", err)
-	}
-
-	// Fetch total count
-	totalCount, err := s.followingRepo.GetTotalFollowingCount(ctx, userID)
-	if err != nil {
-		span.RecordError(err)
-		return nil, fmt.Errorf("failed to get total following count: %w", err)
-	}
-
-	// Determine if there are more pages
-	hasMore := len(items) > limit
-	if hasMore {
-		// Remove the extra item
-		items = items[:limit]
 	}
 
 	// Convert repository items to DTOs
@@ -73,20 +55,11 @@ func (s *FollowingService) GetFollowing(ctx context.Context, userID uuid.UUID, l
 
 	// Prepare response
 	response := &dto.FollowingListResponseDTO{
-		Items:      dtoItems,
-		HasMore:    hasMore,
-		TotalCount: totalCount,
-	}
-
-	// Set next cursor if there are more pages
-	if hasMore && len(dtoItems) > 0 {
-		response.NextCursor = dtoItems[len(dtoItems)-1].XAuthorID
+		Items: dtoItems,
 	}
 
 	span.SetAttributes(
 		attribute.Int("items_returned", len(dtoItems)),
-		attribute.Bool("has_more", hasMore),
-		attribute.Int("total_count", totalCount),
 	)
 
 	return response, nil

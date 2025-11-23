@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -15,15 +16,15 @@ import (
 
 // IngestHandler handles ingestion-related HTTP requests
 type IngestHandler struct {
-	ingestService    *services.IngestService
-	ingestionService *services.IngestionService
+	ingestStatusService *services.IngestStatusService
+	ingestService       *services.IngestService
 }
 
 // NewIngestHandler creates a new IngestHandler instance
-func NewIngestHandler(ingestService *services.IngestService, ingestionService *services.IngestionService) *IngestHandler {
+func NewIngestHandler(ingestStatusService *services.IngestStatusService, ingestService *services.IngestService) *IngestHandler {
 	return &IngestHandler{
-		ingestService:    ingestService,
-		ingestionService: ingestionService,
+		ingestStatusService: ingestStatusService,
+		ingestService:       ingestService,
 	}
 }
 
@@ -81,7 +82,7 @@ func (h *IngestHandler) GetIngestStatus(c *gin.Context) {
 	span.SetAttributes(attribute.Int("limit", limit))
 
 	// Call service layer to get ingest status
-	status, err := h.ingestService.GetIngestStatus(ctx, userID, limit)
+	status, err := h.ingestStatusService.GetIngestStatus(ctx, userID, limit)
 	if err != nil {
 		span.RecordError(err)
 		h.respondWithError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Wystąpił błąd podczas pobierania statusu ingestion", nil)
@@ -133,7 +134,7 @@ func (h *IngestHandler) TriggerIngest(c *gin.Context) {
 	go func() {
 		// Create a new context for the background operation
 		backgroundCtx := context.Background()
-		err := h.ingestionService.IngestUserData(backgroundCtx, userID)
+		err := h.ingestService.IngestUserData(backgroundCtx, userID)
 		if err != nil {
 			// Log error - in a real implementation, you'd want proper logging here
 			// For now, we'll just ignore background errors
@@ -145,7 +146,7 @@ func (h *IngestHandler) TriggerIngest(c *gin.Context) {
 	response := dto.TriggerIngestResponseDTO{
 		IngestRunID: "background", // Placeholder - in real implementation, return actual run ID
 		Status:      "triggered",
-		StartedAt:   span.StartTime(),
+		StartedAt:   time.Now(),
 	}
 
 	c.JSON(http.StatusAccepted, response)

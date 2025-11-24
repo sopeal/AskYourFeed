@@ -65,8 +65,7 @@ type IngestRun struct {
 	StartedAt     time.Time  `db:"started_at"`
 	CompletedAt   *time.Time `db:"completed_at"` // Nullable in DB
 	Status        string     `db:"status"`       // CHECK: 'ok', 'rate_limited', 'error'
-	Cursor        string     `db:"cursor"`       // Current pagination cursor
-	LastCursor    string     `db:"last_cursor"` // Last cursor from previous run
+	SinceID       int64      `db:"since_id"`     // Twitter post ID to fetch from
 	FetchedCount  int        `db:"fetched_count"`
 	Retried       int        `db:"retried"`
 	RateLimitHits int        `db:"rate_limit_hits"`

@@ -40,14 +40,14 @@ func main() {
 	// Initialize services
 	llmService := services.NewLLMService()
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
-	ingestService := services.NewIngestService(ingestRepo)
+	ingestStatusService := services.NewIngestStatusService(ingestRepo)
 	followingService := services.NewFollowingService(followingRepo)
 
 	// Initialize Twitter API client
 	twitterClient := services.NewTwitterClient(config.TwitterAPIKey)
 
 	// Initialize ingestion service
-	ingestionService := services.NewIngestionService(
+	ingestService := services.NewIngestService(
 		twitterClient,
 		ingestRepo,
 		followingRepo,
@@ -57,7 +57,7 @@ func main() {
 
 	// Initialize handlers
 	qaHandler := handlers.NewQAHandler(qaService)
-	ingestHandler := handlers.NewIngestHandler(ingestService, ingestionService)
+	ingestHandler := handlers.NewIngestHandler(ingestStatusService, ingestService)
 	followingHandler := handlers.NewFollowingHandler(followingService)
 
 	// Set up HTTP router
@@ -97,8 +97,8 @@ func main() {
 
 // Config holds application configuration
 type Config struct {
-	Port         string
-	DatabaseURL  string
+	Port          string
+	DatabaseURL   string
 	TwitterAPIKey string
 }
 
@@ -164,11 +164,11 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 		qa := v1.Group("/qa")
 		qa.Use(authMiddleware()) // Apply auth middleware to Q&A routes
 		{
-			qa.POST("", qaHandler.CreateQA)           // Create new Q&A
-			qa.GET("", qaHandler.ListQA)              // List Q&A history
-			qa.GET("/:id", qaHandler.GetQAByID)       // Get specific Q&A
-			qa.DELETE("/:id", qaHandler.DeleteQA)     // Delete specific Q&A
-			qa.DELETE("", qaHandler.DeleteAllQA)      // Delete all Q&A
+			qa.POST("", qaHandler.CreateQA)       // Create new Q&A
+			qa.GET("", qaHandler.ListQA)          // List Q&A history
+			qa.GET("/:id", qaHandler.GetQAByID)   // Get specific Q&A
+			qa.DELETE("/:id", qaHandler.DeleteQA) // Delete specific Q&A
+			qa.DELETE("", qaHandler.DeleteAllQA)  // Delete all Q&A
 		}
 
 		// Ingest endpoints (protected by auth middleware)

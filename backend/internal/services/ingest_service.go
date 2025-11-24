@@ -23,8 +23,8 @@ type IngestService struct {
 	authorRepo    *repositories.AuthorRepository
 }
 
-// NewIngestionService creates a new IngestService instance
-func NewIngestionService(
+// NewIngestService creates a new IngestService instance
+func NewIngestService(
 	twitterClient *TwitterClient,
 	ingestRepo *repositories.IngestRepository,
 	followingRepo *repositories.FollowingRepository,
@@ -58,8 +58,8 @@ func (s *IngestService) IngestUserData(ctx context.Context, userID uuid.UUID) er
 		return fmt.Errorf("ingestion already running for user %s", userID.String())
 	}
 
-	// Get the last cursor from the most recent completed run
-	lastCursor := ""
+	// Get the last since_id from the most recent completed run
+	sinceID := int64(1000000000) // Default starting point
 	lastRun, err := s.ingestRepo.GetRecentRuns(ctx, userID, 1)
 	if err != nil {
 		span.RecordError(err)
@@ -67,12 +67,12 @@ func (s *IngestService) IngestUserData(ctx context.Context, userID uuid.UUID) er
 	}
 
 	if len(lastRun) > 0 {
-		lastCursor = lastRun[0].Cursor
+		sinceID = lastRun[0].SinceID
 	}
 
 	// Create a new ingest run
 	runID := ulid.Make().String()
-	err = s.ingestRepo.CreateIngestRun(ctx, userID, runID, lastCursor)
+	err = s.ingestRepo.CreateIngestRun(ctx, userID, runID, sinceID)
 	if err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("failed to create ingest run: %w", err)
@@ -81,7 +81,7 @@ func (s *IngestService) IngestUserData(ctx context.Context, userID uuid.UUID) er
 	span.SetAttributes(attribute.String("run_id", runID))
 
 	// Perform the ingestion
-	totalFetched, err := s.performIngestion(ctx, userID, runID, lastCursor)
+	totalFetched, err := s.performIngestion(ctx, userID, runID, sinceID)
 	if err != nil {
 		// Mark run as failed
 		errText := err.Error()
@@ -102,14 +102,14 @@ func (s *IngestService) IngestUserData(ctx context.Context, userID uuid.UUID) er
 }
 
 // performIngestion executes the actual ingestion logic
-func (s *IngestService) performIngestion(ctx context.Context, userID uuid.UUID, runID string, startCursor string) (int, error) {
+func (s *IngestService) performIngestion(ctx context.Context, userID uuid.UUID, runID string, sinceID int64) (int, error) {
 	ctx, span := ingestionServiceTracer.Start(ctx, "performIngestion")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("user_id", userID.String()),
 		attribute.String("run_id", runID),
-		attribute.String("start_cursor", startCursor),
+		attribute.Int64("since_id", sinceID),
 	)
 
 	totalFetched := 0
@@ -123,7 +123,7 @@ func (s *IngestService) performIngestion(ctx context.Context, userID uuid.UUID, 
 	totalFetched += followingFetched
 
 	// Step 2: Ingest tweets from followed users
-	tweetsFetched, err := s.ingestTweets(ctx, userID, runID, startCursor)
+	tweetsFetched, err := s.ingestTweets(ctx, userID, runID, sinceID)
 	if err != nil {
 		span.RecordError(err)
 		return totalFetched, fmt.Errorf("failed to ingest tweets: %w", err)
@@ -190,13 +190,13 @@ func (s *IngestService) ingestFollowing(ctx context.Context, userID uuid.UUID, r
 }
 
 // ingestTweets ingests tweets from followed users
-func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runID string, startCursor string) (int, error) {
+func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runID string, sinceID int64) (int, error) {
 	ctx, span := ingestionServiceTracer.Start(ctx, "ingestTweets")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("run_id", runID),
-		attribute.String("start_cursor", startCursor),
+		attribute.Int64("since_id", sinceID),
 	)
 
 	// Get all followed authors
@@ -207,7 +207,6 @@ func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runI
 	}
 
 	fetched := 0
-	cursor := startCursor
 
 	for _, follow := range following {
 		// Get author details
@@ -222,7 +221,7 @@ func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runI
 		}
 
 		// Get tweets for this author
-		authorTweetsFetched, nextCursor, err := s.ingestTweetsForAuthor(ctx, userID, author.Handle, cursor)
+		authorTweetsFetched, _, err := s.ingestTweetsForAuthor(ctx, userID, author.Handle, "")
 		if err != nil {
 			span.RecordError(err)
 			// Log error but continue with other authors
@@ -231,14 +230,11 @@ func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runI
 
 		fetched += authorTweetsFetched
 
-		// Update cursor for next run
-		if nextCursor != "" {
-			cursor = nextCursor
-			err = s.ingestRepo.UpdateIngestRunCursor(ctx, runID, cursor, fetched)
-			if err != nil {
-				span.RecordError(err)
-				return fetched, fmt.Errorf("failed to update cursor: %w", err)
-			}
+		// Update progress
+		err = s.ingestRepo.UpdateIngestRunProgress(ctx, runID, fetched)
+		if err != nil {
+			span.RecordError(err)
+			return fetched, fmt.Errorf("failed to update progress: %w", err)
 		}
 
 		// Add delay between authors to avoid rate limiting

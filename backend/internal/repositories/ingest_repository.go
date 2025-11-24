@@ -66,8 +66,8 @@ func (r *IngestRepository) GetCurrentRun(ctx context.Context, userID uuid.UUID) 
 	span.SetAttributes(attribute.String("user_id", userID.String()))
 
 	query := `
-		SELECT id, user_id, started_at, completed_at, status, cursor,
-		       last_cursor, fetched_count, retried, rate_limit_hits, err_text
+		SELECT id, user_id, started_at, completed_at, status, since_id,
+		       fetched_count, retried, rate_limit_hits, err_text
 		FROM ingest_runs
 		WHERE user_id = $1 AND completed_at IS NULL
 		ORDER BY started_at DESC
@@ -100,8 +100,8 @@ func (r *IngestRepository) GetRecentRuns(ctx context.Context, userID uuid.UUID, 
 	)
 
 	query := `
-		SELECT id, user_id, started_at, completed_at, status, cursor,
-		       last_cursor, fetched_count, retried, rate_limit_hits, err_text
+		SELECT id, user_id, started_at, completed_at, status, since_id,
+		       fetched_count, retried, rate_limit_hits, err_text
 		FROM ingest_runs
 		WHERE user_id = $1 AND completed_at IS NOT NULL
 		ORDER BY started_at DESC
@@ -125,23 +125,23 @@ func (r *IngestRepository) GetRecentRuns(ctx context.Context, userID uuid.UUID, 
 	return runs, nil
 }
 
-// CreateIngestRun creates a new ingest run with cursor-based pagination
-func (r *IngestRepository) CreateIngestRun(ctx context.Context, userID uuid.UUID, runID string, lastCursor string) error {
+// CreateIngestRun creates a new ingest run with since_id-based pagination
+func (r *IngestRepository) CreateIngestRun(ctx context.Context, userID uuid.UUID, runID string, sinceID int64) error {
 	ctx, span := ingestRepoTracer.Start(ctx, "CreateIngestRun")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("user_id", userID.String()),
 		attribute.String("run_id", runID),
-		attribute.String("last_cursor", lastCursor),
+		attribute.Int64("since_id", sinceID),
 	)
 
 	query := `
-		INSERT INTO ingest_runs (id, user_id, started_at, status, cursor, last_cursor, fetched_count, retried, rate_limit_hits)
-		VALUES ($1, $2, NOW(), 'ok', '', $3, 0, 0, 0)
+		INSERT INTO ingest_runs (id, user_id, started_at, status, since_id, fetched_count, retried, rate_limit_hits)
+		VALUES ($1, $2, NOW(), 'ok', $3, 0, 0, 0)
 	`
 
-	_, err := r.db.ExecContext(ctx, query, runID, userID, lastCursor)
+	_, err := r.db.ExecContext(ctx, query, runID, userID, sinceID)
 	if err != nil {
 		span.RecordError(err)
 		return fmt.Errorf("failed to create ingest run: %w", err)
@@ -150,27 +150,26 @@ func (r *IngestRepository) CreateIngestRun(ctx context.Context, userID uuid.UUID
 	return nil
 }
 
-// UpdateIngestRunCursor updates the cursor for an ongoing ingest run
-func (r *IngestRepository) UpdateIngestRunCursor(ctx context.Context, runID string, cursor string, fetchedCount int) error {
-	ctx, span := ingestRepoTracer.Start(ctx, "UpdateIngestRunCursor")
+// UpdateIngestRunProgress updates the fetched count for an ongoing ingest run
+func (r *IngestRepository) UpdateIngestRunProgress(ctx context.Context, runID string, fetchedCount int) error {
+	ctx, span := ingestRepoTracer.Start(ctx, "UpdateIngestRunProgress")
 	defer span.End()
 
 	span.SetAttributes(
 		attribute.String("run_id", runID),
-		attribute.String("cursor", cursor),
 		attribute.Int("fetched_count", fetchedCount),
 	)
 
 	query := `
 		UPDATE ingest_runs
-		SET cursor = $2, fetched_count = $3
+		SET fetched_count = $2
 		WHERE id = $1
 	`
 
-	result, err := r.db.ExecContext(ctx, query, runID, cursor, fetchedCount)
+	result, err := r.db.ExecContext(ctx, query, runID, fetchedCount)
 	if err != nil {
 		span.RecordError(err)
-		return fmt.Errorf("failed to update ingest run cursor: %w", err)
+		return fmt.Errorf("failed to update ingest run progress: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()

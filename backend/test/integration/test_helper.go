@@ -26,18 +26,23 @@ func NewTestRouter(db *sqlx.DB) *TestRouter {
 
 	// Initialize dependencies
 	ingestRepo := repositories.NewIngestRepository(db)
-	ingestService := services.NewIngestService(ingestRepo)
-	ingestHandler := handlers.NewIngestHandler(ingestService)
+	followingRepo := repositories.NewFollowingRepository(db)
+	postRepo := repositories.NewPostRepository(db)
+	authorRepo := repositories.NewAuthorRepository(db)
+	twitterClient := services.NewTwitterClient("") // Empty API key for testing
+	ingestService := services.NewIngestService(twitterClient, ingestRepo, followingRepo, postRepo, authorRepo)
+	ingestStatusService := services.NewIngestStatusService(ingestRepo)
+	ingestHandler := handlers.NewIngestHandler(ingestStatusService, ingestService)
 
 	// Initialize QA dependencies
 	qaRepo := repositories.NewQARepository(db)
-	postRepo := repositories.NewPostRepository(db)
+	//postRepo := repositories.NewPostRepository(db)
 	llmService := services.NewLLMService() // Mock service for testing
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	qaHandler := handlers.NewQAHandler(qaService)
 
 	// Initialize Following dependencies
-	followingRepo := repositories.NewFollowingRepository(db)
+	//followingRepo := repositories.NewFollowingRepository(db)
 	followingService := services.NewFollowingService(followingRepo)
 	followingHandler := handlers.NewFollowingHandler(followingService)
 

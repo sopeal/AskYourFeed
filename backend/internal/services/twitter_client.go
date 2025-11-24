@@ -25,13 +25,16 @@ type TwitterClient struct {
 }
 
 // NewTwitterClient creates a new Twitter API client
-func NewTwitterClient(apiKey string) *TwitterClient {
-	return &TwitterClient{
-		apiKey:  apiKey,
-		baseURL: "https://api.twitterapi.io",
-		httpClient: &http.Client{
+func NewTwitterClient(apiKey string, httpClient *http.Client) *TwitterClient {
+	if httpClient == nil {
+		httpClient = &http.Client{
 			Timeout: 30 * time.Second,
-		},
+		}
+	}
+	return &TwitterClient{
+		apiKey:     apiKey,
+		baseURL:    "https://api.twitterapi.io",
+		httpClient: httpClient,
 	}
 }
 

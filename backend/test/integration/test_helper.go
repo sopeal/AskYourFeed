@@ -19,8 +19,13 @@ type TestRouter struct {
 	engine *gin.Engine
 }
 
-// NewTestRouter creates a new test router
+// NewTestRouter creates a new test router with default HTTP client
 func NewTestRouter(db *sqlx.DB) *TestRouter {
+	return NewTestRouterWithClient(db, nil)
+}
+
+// NewTestRouterWithClient creates a new test router with optional custom HTTP client for TwitterClient
+func NewTestRouterWithClient(db *sqlx.DB, httpClient *http.Client) *TestRouter {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
@@ -29,7 +34,7 @@ func NewTestRouter(db *sqlx.DB) *TestRouter {
 	followingRepo := repositories.NewFollowingRepository(db)
 	postRepo := repositories.NewPostRepository(db)
 	authorRepo := repositories.NewAuthorRepository(db)
-	twitterClient := services.NewTwitterClient("") // Empty API key for testing
+	twitterClient := services.NewTwitterClient("", httpClient) // Empty API key for testing
 	ingestService := services.NewIngestService(twitterClient, ingestRepo, followingRepo, postRepo, authorRepo)
 	ingestStatusService := services.NewIngestStatusService(ingestRepo)
 	ingestHandler := handlers.NewIngestHandler(ingestStatusService, ingestService)
@@ -52,6 +57,7 @@ func NewTestRouter(db *sqlx.DB) *TestRouter {
 	ingest.Use(testAuthMiddleware())
 	{
 		ingest.GET("/status", ingestHandler.GetIngestStatus)
+		ingest.POST("/trigger", ingestHandler.TriggerIngest)
 	}
 
 	qa := v1.Group("/qa")

@@ -7,17 +7,60 @@ import (
 )
 
 // =============================================================================
+// Authentication DTOs
+// =============================================================================
+
+// RegisterCommand represents request to register a new user
+// Command model for POST /api/v1/auth/register
+type RegisterCommand struct {
+	Email                string `json:"email" validate:"required,email"`
+	Password             string `json:"password" validate:"required,min=8"`
+	PasswordConfirmation string `json:"password_confirmation" validate:"required"`
+	XUsername            string `json:"x_username" validate:"required"`
+}
+
+// RegisterResponseDTO represents response after successful registration
+type RegisterResponseDTO struct {
+	UserID       uuid.UUID `json:"user_id"`
+	Email        string    `json:"email"`
+	XUsername    string    `json:"x_username"`
+	XDisplayName string    `json:"x_display_name"`
+	CreatedAt    time.Time `json:"created_at"`
+	SessionToken string    `json:"session_token"`
+}
+
+// LoginCommand represents request to login
+// Command model for POST /api/v1/auth/login
+type LoginCommand struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
+}
+
+// LoginResponseDTO represents response after successful login
+type LoginResponseDTO struct {
+	UserID           uuid.UUID `json:"user_id"`
+	Email            string    `json:"email"`
+	XUsername        string    `json:"x_username"`
+	XDisplayName     string    `json:"x_display_name"`
+	SessionToken     string    `json:"session_token"`
+	SessionExpiresAt time.Time `json:"session_expires_at"`
+}
+
+// =============================================================================
 // Session DTOs
 // =============================================================================
 
 // SessionDTO represents current user session information
-// Maps to: OAuth tokens (external storage) + user metadata
+// Maps to: sessions table + users table
 type SessionDTO struct {
 	UserID           uuid.UUID `json:"user_id"`
-	XHandle          string    `json:"x_handle"`
+	Email            string    `json:"email"`
+	XUsername        string    `json:"x_username"`
 	XDisplayName     string    `json:"x_display_name"`
 	AuthenticatedAt  time.Time `json:"authenticated_at"`
 	SessionExpiresAt time.Time `json:"session_expires_at"`
+	FollowingCount   int       `json:"following_count"`
+	FollowingLimit   int       `json:"following_limit"`
 }
 
 // =============================================================================

@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/sopeal/AskYourFeed/internal/handlers"
+	"github.com/sopeal/AskYourFeed/internal/middleware"
 	"github.com/sopeal/AskYourFeed/internal/repositories"
 	"github.com/sopeal/AskYourFeed/internal/services"
 )
@@ -36,15 +36,18 @@ func main() {
 	ingestRepo := repositories.NewIngestRepository(db)
 	followingRepo := repositories.NewFollowingRepository(db)
 	authorRepo := repositories.NewAuthorRepository(db)
+	userRepo := repositories.NewUserRepository(db)
+	sessionRepo := repositories.NewSessionRepository(db)
+
+	// Initialize Twitter API client
+	twitterClient := services.NewTwitterClient(config.TwitterAPIKey, nil)
 
 	// Initialize services
 	llmService := services.NewLLMService()
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	ingestStatusService := services.NewIngestStatusService(ingestRepo)
 	followingService := services.NewFollowingService(followingRepo)
-
-	// Initialize Twitter API client
-	twitterClient := services.NewTwitterClient(config.TwitterAPIKey)
+	authService := services.NewAuthService(userRepo, sessionRepo, *twitterClient)
 
 	// Initialize ingestion service
 	ingestService := services.NewIngestService(
@@ -59,9 +62,10 @@ func main() {
 	qaHandler := handlers.NewQAHandler(qaService)
 	ingestHandler := handlers.NewIngestHandler(ingestStatusService, ingestService)
 	followingHandler := handlers.NewFollowingHandler(followingService)
+	authHandler := handlers.NewAuthHandler(authService)
 
 	// Set up HTTP router
-	router := setupRouter(qaHandler, ingestHandler, followingHandler)
+	router := setupRouter(db, authService, authHandler, qaHandler, ingestHandler, followingHandler)
 
 	// Start HTTP server with graceful shutdown
 	srv := &http.Server{
@@ -141,7 +145,14 @@ func initDatabase(databaseURL string) (*sqlx.DB, error) {
 }
 
 // setupRouter configures the Gin router with routes and middleware
-func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHandler, followingHandler *handlers.FollowingHandler) *gin.Engine {
+func setupRouter(
+	db *sqlx.DB,
+	authService services.AuthService,
+	authHandler *handlers.AuthHandler,
+	qaHandler *handlers.QAHandler,
+	ingestHandler *handlers.IngestHandler,
+	followingHandler *handlers.FollowingHandler,
+) *gin.Engine {
 	// Set Gin to release mode for production (can be overridden with GIN_MODE env var)
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -160,9 +171,24 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
+		// Authentication endpoints (public - no auth required)
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/register", authHandler.Register)
+			auth.POST("/login", authHandler.Login)
+			auth.POST("/logout", authHandler.Logout) // Requires auth but handled in handler
+		}
+
+		// Session endpoints (protected by auth middleware)
+		session := v1.Group("/session")
+		session.Use(middleware.AuthMiddleware(authService, db))
+		{
+			session.GET("/current", authHandler.GetCurrentSession)
+		}
+
 		// Q&A endpoints (protected by auth middleware)
 		qa := v1.Group("/qa")
-		qa.Use(authMiddleware()) // Apply auth middleware to Q&A routes
+		qa.Use(middleware.AuthMiddleware(authService, db))
 		{
 			qa.POST("", qaHandler.CreateQA)       // Create new Q&A
 			qa.GET("", qaHandler.ListQA)          // List Q&A history
@@ -173,7 +199,7 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 
 		// Ingest endpoints (protected by auth middleware)
 		ingest := v1.Group("/ingest")
-		ingest.Use(authMiddleware()) // Apply auth middleware to ingest routes
+		ingest.Use(middleware.AuthMiddleware(authService, db))
 		{
 			ingest.GET("/status", ingestHandler.GetIngestStatus)
 			ingest.POST("/trigger", ingestHandler.TriggerIngest)
@@ -181,7 +207,7 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 
 		// Following endpoints (protected by auth middleware)
 		following := v1.Group("/following")
-		following.Use(authMiddleware()) // Apply auth middleware to following routes
+		following.Use(middleware.AuthMiddleware(authService, db))
 		{
 			following.GET("", followingHandler.GetFollowing) // Get list of followed authors
 		}
@@ -197,36 +223,6 @@ func healthCheckHandler(c *gin.Context) {
 		"timestamp": time.Now().Format(time.RFC3339),
 		"version":   "1.0.0",
 	})
-}
-
-// authMiddleware is a placeholder for authentication middleware
-// In production, this would validate session tokens and extract user_id
-func authMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// TODO: Implement actual session validation
-		// For now, we'll use a mock user_id for development/testing
-
-		// Extract Authorization header
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"code":    "UNAUTHORIZED",
-					"message": "Missing authorization header",
-				},
-			})
-			c.Abort()
-			return
-		}
-
-		// In production, validate the Bearer token and extract user_id from session
-		// For now, use a mock user_id (this MUST be replaced with real auth)
-		mockUserID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
-		// Set user_id in context for handlers to use
-		c.Set("user_id", mockUserID)
-		c.Next()
-	}
 }
 
 // corsMiddleware adds CORS headers to responses

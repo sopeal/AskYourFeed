@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RegisterView } from './views/RegisterView';
+import { LoginView } from './views/LoginView';
 import './App.css';
 
 // Create a client for React Query
@@ -21,11 +22,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          {/* Registration route */}
+          {/* Authentication routes */}
           <Route path="/register" element={<RegisterView />} />
+          <Route path="/login" element={<LoginView />} />
           
-          {/* Temporary home route - redirect to register for now */}
-          <Route path="/" element={<Navigate to="/register" replace />} />
+          {/* Temporary home route - redirect to login for now */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
           
           {/* Catch all - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />

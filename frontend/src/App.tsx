@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RegisterView } from './views/RegisterView';
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
+import { HistoryView } from './views/HistoryView';
 import { ProtectedRoute } from './components/shared/ProtectedRoute';
 import './App.css';
 
@@ -34,6 +35,16 @@ function App() {
             element={
               <ProtectedRoute>
                 <DashboardView />
+              </ProtectedRoute>
+            } 
+          />
+          
+          {/* Protected history route */}
+          <Route 
+            path="/history" 
+            element={
+              <ProtectedRoute>
+                <HistoryView />
               </ProtectedRoute>
             } 
           />

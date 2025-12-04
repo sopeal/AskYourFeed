@@ -1,3 +1,7 @@
+TODO
+- wszystkie błędy mają być po polsku, nie jest przy walidacji maila podczas logowania
+- nie ma wyloguj z głównego ekranu
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

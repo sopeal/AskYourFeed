@@ -1,13 +1,13 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from 'react-router-dom';
-import { registerSchema, type RegisterFormData } from '../../../schemas/auth.schema';
-import { useRegister } from '../../../hooks/useRegister';
-import { InputField } from '../../../components/shared/InputField';
-import { SubmitButton } from '../../../components/shared/SubmitButton';
-import type { RegisterCommand } from '../../../types/auth.types';
+import { registerSchema, type RegisterFormData } from '@/schemas/auth.schema.ts';
+import { useRegister } from '@/hooks/useRegister.ts';
+import { InputField } from '@/components/shared/InputField.tsx';
+import { SubmitButton } from '@/components/shared/SubmitButton.tsx';
+import type { RegisterCommand } from '@/types/auth.types.ts';
 import { AxiosError } from 'axios';
-import type { ErrorResponseDTO } from '../../../types/auth.types';
+import type { ErrorResponseDTO } from '@/types/auth.types.ts';
 
 /**
  * Registration form component

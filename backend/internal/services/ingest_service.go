@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/oklog/ulid/v2"
 	"github.com/sopeal/AskYourFeed/internal/repositories"
+	"github.com/sopeal/AskYourFeed/pkg/logger"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -213,10 +214,17 @@ func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runI
 		author, err := s.authorRepo.GetAuthor(ctx, follow.XAuthorID)
 		if err != nil {
 			span.RecordError(err)
+			logger.Warn("failed to get author details, skipping",
+				"error", err,
+				"author_id", follow.XAuthorID,
+				"user_id", userID)
 			continue // Skip this author if we can't get details
 		}
 
 		if author == nil || author.Handle == "" {
+			logger.Debug("skipping author with no handle",
+				"author_id", follow.XAuthorID,
+				"user_id", userID)
 			continue // Skip if no handle
 		}
 
@@ -224,7 +232,11 @@ func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runI
 		authorTweetsFetched, _, err := s.ingestTweetsForAuthor(ctx, userID, author.Handle, "")
 		if err != nil {
 			span.RecordError(err)
-			// Log error but continue with other authors
+			logger.Warn("failed to ingest tweets for author, continuing with others",
+				"error", err,
+				"author_handle", author.Handle,
+				"author_id", follow.XAuthorID,
+				"user_id", userID)
 			continue
 		}
 
@@ -279,6 +291,10 @@ func (s *IngestService) ingestTweetsForAuthor(ctx context.Context, userID uuid.U
 		exists, err := s.postRepo.PostExists(ctx, userID, tweetDTO.ID)
 		if err != nil {
 			span.RecordError(err)
+			logger.Warn("failed to check if post exists, skipping",
+				"error", err,
+				"post_id", tweetDTO.ID,
+				"author_handle", authorHandle)
 			continue // Skip this tweet
 		}
 
@@ -290,6 +306,11 @@ func (s *IngestService) ingestTweetsForAuthor(ctx context.Context, userID uuid.U
 		err = s.postRepo.InsertPost(ctx, userID, tweetDTO)
 		if err != nil {
 			span.RecordError(err)
+			logger.Error("failed to insert post",
+				err,
+				"post_id", tweetDTO.ID,
+				"author_handle", authorHandle,
+				"user_id", userID)
 			continue // Skip this tweet
 		}
 

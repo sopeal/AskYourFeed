@@ -12,11 +12,14 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080
  * GET /api/v1/ingest/status
  */
 const fetchSyncStatus = async (): Promise<IngestStatusDTO> => {
+  const sessionToken = localStorage.getItem('session_token');
+  
   const response = await axios.get<IngestStatusDTO>(
     `${API_BASE_URL}/api/v1/ingest/status`,
     {
       headers: {
         'Content-Type': 'application/json',
+        ...(sessionToken && { 'Authorization': `Bearer ${sessionToken}` }),
       },
       withCredentials: true, // Include session cookie
     }

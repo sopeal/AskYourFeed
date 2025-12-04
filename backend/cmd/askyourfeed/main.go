@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,15 +18,27 @@ import (
 	"github.com/sopeal/AskYourFeed/internal/middleware"
 	"github.com/sopeal/AskYourFeed/internal/repositories"
 	"github.com/sopeal/AskYourFeed/internal/services"
+	"github.com/sopeal/AskYourFeed/pkg/logger"
 )
 
 func main() {
+	// Initialize logger
+	logLevel := getLogLevel()
+	logger.Init(logLevel)
+
 	// Load configuration from environment variables
 	config := loadConfig()
+
+	logger.Info("starting AskYourFeed backend",
+		"version", "1.0.0",
+		"port", config.Port,
+		"log_level", logLevel.String(),
+		"database_url", maskDatabaseURL(config.DatabaseURL))
 
 	// Initialize database connection
 	db, err := initDatabase(config.DatabaseURL)
 	if err != nil {
+		logger.Error("failed to initialize database", err)
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
@@ -75,8 +88,9 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Starting server on port %s", config.Port)
+		logger.Info("HTTP server listening", "port", config.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server failed to start", err)
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
@@ -86,17 +100,18 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("shutting down server gracefully...")
 
 	// Graceful shutdown with 5 second timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("server forced to shutdown", err)
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	log.Println("Server exited")
+	logger.Info("server exited successfully")
 }
 
 // Config holds application configuration
@@ -140,8 +155,36 @@ func initDatabase(databaseURL string) (*sqlx.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Println("Database connection established")
+	logger.Info("database connection established",
+		"max_open_conns", 25,
+		"max_idle_conns", 5,
+		"conn_max_lifetime", "5m")
 	return db, nil
+}
+
+// getLogLevel returns the log level from environment variable
+func getLogLevel() slog.Level {
+	switch os.Getenv("LOG_LEVEL") {
+	case "DEBUG":
+		return slog.LevelDebug
+	case "INFO":
+		return slog.LevelInfo
+	case "WARN":
+		return slog.LevelWarn
+	case "ERROR":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
+// maskDatabaseURL masks sensitive parts of the database URL for logging
+func maskDatabaseURL(url string) string {
+	// Simple masking - in production, use a proper URL parser
+	if len(url) > 20 {
+		return url[:10] + "***" + url[len(url)-10:]
+	}
+	return "***"
 }
 
 // setupRouter configures the Gin router with routes and middleware
@@ -228,9 +271,11 @@ func healthCheckHandler(c *gin.Context) {
 // corsMiddleware adds CORS headers to responses
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		// Allow specific origin for development (Vite dev server)
+		// In production, this should be configurable
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 
 		if c.Request.Method == "OPTIONS" {

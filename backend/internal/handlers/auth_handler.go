@@ -74,6 +74,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
+	// Set session cookie
+	// Domain is empty string to allow cookie to work across different ports on localhost
+	// MaxAge: 7 days, Path: /, Domain: "", Secure: false (for HTTP), HttpOnly: true
+	c.SetCookie("session_token", response.SessionToken, 7*24*3600, "/", "", false, true)
+
 	c.JSON(http.StatusCreated, response)
 }
 
@@ -113,6 +118,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		})
 		return
 	}
+
+	// Set session cookie
+	// Domain is empty string to allow cookie to work across different ports on localhost
+	// MaxAge: 7 days, Path: /, Domain: "", Secure: false (for HTTP), HttpOnly: true
+	c.SetCookie("session_token", response.SessionToken, 7*24*3600, "/", "", false, true)
 
 	c.JSON(http.StatusOK, response)
 }

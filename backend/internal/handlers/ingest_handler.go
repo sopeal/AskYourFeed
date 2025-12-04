@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sopeal/AskYourFeed/internal/dto"
 	"github.com/sopeal/AskYourFeed/internal/services"
+	"github.com/sopeal/AskYourFeed/pkg/logger"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -85,6 +86,11 @@ func (h *IngestHandler) GetIngestStatus(c *gin.Context) {
 	status, err := h.ingestStatusService.GetIngestStatus(ctx, userID, limit)
 	if err != nil {
 		span.RecordError(err)
+		logger.Error("failed to get ingest status",
+			err,
+			"user_id", userID,
+			"limit", limit,
+			"path", c.Request.URL.Path)
 		h.respondWithError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Wystąpił błąd podczas pobierania statusu ingestion", nil)
 		return
 	}
@@ -136,9 +142,12 @@ func (h *IngestHandler) TriggerIngest(c *gin.Context) {
 		backgroundCtx := context.Background()
 		err := h.ingestService.IngestUserData(backgroundCtx, userID)
 		if err != nil {
-			// Log error - in a real implementation, you'd want proper logging here
-			// For now, we'll just ignore background errors
-			_ = err
+			logger.Error("background ingestion failed",
+				err,
+				"user_id", userID)
+		} else {
+			logger.Info("background ingestion completed successfully",
+				"user_id", userID)
 		}
 	}()
 

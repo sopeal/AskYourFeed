@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sopeal/AskYourFeed/internal/dto"
 	"github.com/sopeal/AskYourFeed/internal/services"
+	"github.com/sopeal/AskYourFeed/pkg/logger"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -329,6 +330,14 @@ func (h *QAHandler) handleServiceError(c *gin.Context, err error) {
 	span := trace.SpanFromContext(ctx)
 
 	span.RecordError(err)
+
+	// Log error with context
+	userID, _ := c.Get("user_id")
+	logger.Error("service error in QA handler",
+		err,
+		"user_id", userID,
+		"path", c.Request.URL.Path,
+		"method", c.Request.Method)
 
 	// Map service errors to HTTP status codes
 	switch err {

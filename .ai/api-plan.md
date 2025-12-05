@@ -710,7 +710,7 @@ Cookie: session_token=<session_token>
    - Backfill: Paginate using `cursor` and `has_next_page` until 24h reached or no more pages
 6. **Temporal Filtering:** Filter by `createdAt` field (no `since_id` parameter in twitterapi.io)
 7. **Media Processing:**
-   - Images: Max 4 per post, converted to text descriptions via Vision API
+   - Images: Max 4 per post, converted to text descriptions via OpenRouter
    - Videos: Max 90 seconds or 25 MB, transcribed to text
    - Media content merged into `posts.text` field
 8. **Rate Limiting:**
@@ -838,7 +838,7 @@ Cookie: session_token=<session_token>
 - Distributed traces across all service boundaries
 - Span annotations for key operations
 - DB queries traced with sanitized query text
-- External API calls traced (twitterapi.io, LLM, Vision API)
+- External API calls traced (twitterapi.io, LLM, OpenRouter)
 
 **Key SLIs:**
 - Availability: 99.5% uptime
@@ -922,7 +922,7 @@ Referrer-Policy: strict-origin-when-cross-origin
 
 **Additional Costs:**
 - User profile fetches: 150 profiles × $0.18/1k = $0.027 per backfill
-- Vision API for media processing (separate service)
+- OpenRouter for media processing (separate service)
 - LLM API for Q&A (separate service)
 
 ### 7.4. Error Handling

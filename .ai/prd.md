@@ -62,7 +62,7 @@ Użytkownicy konsumują feed X z różnymi intencjami: szybki przegląd dnia vs.
 * Przechowywanie metadanych: `id`, `url`, `createdAt`, `author` (userName, name, id), `likeCount`, `retweetCount`, `replyCount`, `viewCount`.
 
 **Media:**
-* **Konwersja do tekstu:** Obrazy i krótkie wideo konwertowane do tekstu za pomocą zewnętrznego API Vision (np. OpenAI Vision API, Google Cloud Vision).
+* **Konwersja do tekstu:** Obrazy i krótkie wideo konwertowane do tekstu za pomocą zewnętrznego API Vision (np. OpenAI OpenRouter, Google Cloud Vision).
 * **Limity:** 
   - Wideo: ≤90 s lub ≤25 MB
   - Obrazy: maksymalnie 4 na post
@@ -147,7 +147,7 @@ Użytkownicy konsumują feed X z różnymi intencjami: szybki przegląd dnia vs.
 * Szacunkowy koszt przy 150 followings i 6 ingestów/dzień:
   - 150 requestów × 6 = 900 requestów/dzień
   - ~$0.135/dzień/użytkownik (~$4/miesiąc/użytkownik przy samym ingeście)
-  - Dodatkowe koszty: Vision API, LLM
+  - Dodatkowe koszty: OpenRouter, LLM
 
 **Źródła:**
 * Zawsze linkują do postów z feedu (format URL z twitterapi.io: `https://twitter.com/{userName}/status/{tweetId}`).
@@ -245,10 +245,10 @@ Użytkownicy konsumują feed X z różnymi intencjami: szybki przegląd dnia vs.
 - Nie pojawia się sekcja Źródła, jeśli brak jakichkolwiek postów.
 
 ### US-011
-**Tytuł:** Uwzględnianie treści multimedialnych przez Vision API  
+**Tytuł:** Uwzględnianie treści multimedialnych przez OpenRouter  
 **Opis:** Jako użytkownik chcę, by obrazy i krótkie wideo z feedu były uwzględniane w odpowiedziach.  
 **Kryteria akceptacji:**
-- Media są konwertowane do tekstu podczas ingestu przez zewnętrzne Vision API (np. OpenAI Vision).
+- Media są konwertowane do tekstu podczas ingestu przez zewnętrzne OpenRouter (np. OpenAI Vision).
 - Tekstowe opisy mediów są przechowywane w bazie i widoczne dla LLM.
 - Źródła mogą odwoływać się do postów zawierających media.
 - Wideo >90 s lub >25 MB jest pomijane z logowaniem ostrzeżenia.
@@ -341,7 +341,7 @@ Użytkownicy konsumują feed X z różnymi intencjami: szybki przegląd dnia vs.
   - Wyczerpany budżet kosztowy
   - Błąd walidacji username X (konto nie istnieje)
   - Błędy API twitterapi.io (5xx, timeout)
-  - Błędy Vision API
+  - Błędy OpenRouter
 - Komunikaty są w języku polskim, zgodne z dark mode.
 
 ### US-024

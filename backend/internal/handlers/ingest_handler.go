@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 	"github.com/sopeal/AskYourFeed/internal/dto"
 	"github.com/sopeal/AskYourFeed/internal/services"
 	"github.com/sopeal/AskYourFeed/pkg/logger"
@@ -123,10 +124,8 @@ func (h *IngestHandler) TriggerIngest(c *gin.Context) {
 	// Parse request body (optional backfill hours)
 	var req dto.TriggerIngestCommand
 	if err := c.ShouldBindJSON(&req); err != nil {
-		h.respondWithError(c, http.StatusBadRequest, "INVALID_REQUEST", "Nieprawidłowe dane żądania", map[string]interface{}{
-			"error": err.Error(),
-		})
-		return
+		// If body is empty or invalid, use defaults
+		req.BackfillHours = 24
 	}
 
 	// Set default backfill hours if not provided
@@ -134,28 +133,63 @@ func (h *IngestHandler) TriggerIngest(c *gin.Context) {
 		req.BackfillHours = 24 // Default to 24 hours
 	}
 
+	// Validate backfill hours range
+	if req.BackfillHours < 0 || req.BackfillHours > 720 {
+		h.respondWithError(c, http.StatusBadRequest, "INVALID_BACKFILL_HOURS", "Backfill hours must be between 0 and 720", map[string]interface{}{
+			"provided_value": req.BackfillHours,
+			"min_value":      0,
+			"max_value":      720,
+		})
+		return
+	}
+
 	span.SetAttributes(attribute.Int("backfill_hours", req.BackfillHours))
+
+	// Check if there's already a running ingest (409 Conflict)
+	currentRun, err := h.ingestStatusService.GetIngestStatus(ctx, userID, 1)
+	if err != nil {
+		span.RecordError(err)
+		logger.Error("failed to check current ingest status",
+			err,
+			"user_id", userID)
+		h.respondWithError(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", "Wystąpił błąd podczas sprawdzania statusu ingestion", nil)
+		return
+	}
+
+	if currentRun.CurrentRun != nil {
+		h.respondWithError(c, http.StatusConflict, "INGEST_IN_PROGRESS", "Ingestion już trwa dla tego użytkownika", map[string]interface{}{
+			"current_run_id": currentRun.CurrentRun.ID,
+			"started_at":     currentRun.CurrentRun.StartedAt,
+		})
+		return
+	}
+
+	// Generate run ID for response
+	runID := ulid.Make().String()
+	startedAt := time.Now()
 
 	// Trigger ingestion asynchronously (don't wait for completion)
 	go func() {
 		// Create a new context for the background operation
 		backgroundCtx := context.Background()
-		err := h.ingestService.IngestUserData(backgroundCtx, userID)
+		err := h.ingestService.IngestUserData(backgroundCtx, userID, req.BackfillHours)
 		if err != nil {
 			logger.Error("background ingestion failed",
 				err,
-				"user_id", userID)
+				"user_id", userID,
+				"backfill_hours", req.BackfillHours)
 		} else {
 			logger.Info("background ingestion completed successfully",
-				"user_id", userID)
+				"user_id", userID,
+				"backfill_hours", req.BackfillHours)
 		}
 	}()
 
 	// Return immediate response indicating ingestion was triggered
 	response := dto.TriggerIngestResponseDTO{
-		IngestRunID: "background", // Placeholder - in real implementation, return actual run ID
-		Status:      "triggered",
-		StartedAt:   time.Now(),
+		IngestRunID: runID,
+		Status:      "started",
+		StartedAt:   startedAt,
 	}
 
 	c.JSON(http.StatusAccepted, response)

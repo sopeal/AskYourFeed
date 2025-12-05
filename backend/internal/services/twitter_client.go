@@ -83,25 +83,49 @@ type TweetResponse struct {
 
 // TweetData represents tweet information
 type TweetData struct {
-	Type           string     `json:"type"`
-	ID             string     `json:"id"`
-	URL            string     `json:"url"`
-	Text           string     `json:"text"`
-	Source         string     `json:"source"`
-	RetweetCount   int        `json:"retweetCount"`
-	ReplyCount     int        `json:"replyCount"`
-	LikeCount      int        `json:"likeCount"`
-	QuoteCount     int        `json:"quoteCount"`
-	ViewCount      int        `json:"viewCount"`
-	BookmarkCount  int        `json:"bookmarkCount"`
-	CreatedAt      string     `json:"createdAt"`
-	Lang           string     `json:"lang"`
-	IsReply        bool       `json:"isReply"`
-	InReplyToId    string     `json:"inReplyToId"`
-	ConversationId string     `json:"conversationId"`
-	Author         UserData   `json:"author"`
-	QuotedTweet    *TweetData `json:"quoted_tweet,omitempty"`
-	RetweetedTweet *TweetData `json:"retweeted_tweet,omitempty"`
+	Type           string      `json:"type"`
+	ID             string      `json:"id"`
+	URL            string      `json:"url"`
+	Text           string      `json:"text"`
+	Source         string      `json:"source"`
+	RetweetCount   int         `json:"retweetCount"`
+	ReplyCount     int         `json:"replyCount"`
+	LikeCount      int         `json:"likeCount"`
+	QuoteCount     int         `json:"quoteCount"`
+	ViewCount      int         `json:"viewCount"`
+	BookmarkCount  int         `json:"bookmarkCount"`
+	CreatedAt      string      `json:"createdAt"`
+	Lang           string      `json:"lang"`
+	IsReply        bool        `json:"isReply"`
+	InReplyToId    string      `json:"inReplyToId"`
+	ConversationId string      `json:"conversationId"`
+	Author         UserData    `json:"author"`
+	QuotedTweet    *TweetData  `json:"quoted_tweet,omitempty"`
+	RetweetedTweet *TweetData  `json:"retweeted_tweet,omitempty"`
+	Media          *MediaData  `json:"media,omitempty"`
+}
+
+// MediaData represents media attached to a tweet
+type MediaData struct {
+	Photos []PhotoData `json:"photos,omitempty"`
+	Videos []VideoData `json:"videos,omitempty"`
+}
+
+// PhotoData represents a photo/image in a tweet
+type PhotoData struct {
+	URL    string `json:"url"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
+}
+
+// VideoData represents a video in a tweet
+type VideoData struct {
+	URL            string `json:"url"`
+	ThumbnailURL   string `json:"thumbnail_url,omitempty"`
+	DurationMs     int    `json:"duration_ms,omitempty"`
+	Width          int    `json:"width,omitempty"`
+	Height         int    `json:"height,omitempty"`
+	ViewCount      int    `json:"view_count,omitempty"`
 }
 
 // makeRequest performs HTTP request with authentication and error handling
@@ -311,7 +335,36 @@ func (c *TwitterClient) ConvertUserToDTO(user UserData) *dto.UserDTO {
 }
 
 // IsOriginalPost checks if a tweet is an original post (not a retweet or quote tweet)
+// Self-reply threads are allowed as per business logic
 func (c *TwitterClient) IsOriginalPost(tweet TweetData) bool {
-	// Original posts don't have quoted_tweet or retweeted_tweet fields
-	return tweet.QuotedTweet == nil && tweet.RetweetedTweet == nil
+	// Exclude retweets
+	if tweet.RetweetedTweet != nil {
+		return false
+	}
+	
+	// Exclude quote tweets
+	if tweet.QuotedTweet != nil {
+		return false
+	}
+	
+	// Allow original posts (isReply == false)
+	if !tweet.IsReply {
+		return true
+	}
+	
+	// Allow self-replies (isReply == true AND inReplyToUserId == author.id)
+	// Parse author ID from string
+	authorID, err := strconv.ParseInt(tweet.Author.ID, 10, 64)
+	if err != nil {
+		return false
+	}
+	
+	// Parse inReplyToId from string
+	inReplyToUserID, err := strconv.ParseInt(tweet.InReplyToId, 10, 64)
+	if err != nil {
+		return false
+	}
+	
+	// Check if it's a self-reply
+	return inReplyToUserID == authorID
 }

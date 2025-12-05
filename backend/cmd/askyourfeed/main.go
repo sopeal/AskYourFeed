@@ -55,6 +55,15 @@ func main() {
 	// Initialize Twitter API client
 	twitterClient := services.NewTwitterClient(config.TwitterAPIKey, nil)
 
+	// Initialize OpenRouter client (optional - only if API key is provided)
+	var openRouterClient *services.OpenRouterClient
+	if config.OpenRouterAPIKey != "" {
+		openRouterClient = services.NewOpenRouterClient(config.OpenRouterAPIKey, nil)
+		logger.Info("OpenRouter client initialized for media processing")
+	} else {
+		logger.Warn("OpenRouter API key not provided - media processing will be skipped")
+	}
+
 	// Initialize services
 	llmService := services.NewLLMService()
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
@@ -65,10 +74,12 @@ func main() {
 	// Initialize ingestion service
 	ingestService := services.NewIngestService(
 		twitterClient,
+		openRouterClient,
 		ingestRepo,
 		followingRepo,
 		postRepo,
 		authorRepo,
+		userRepo,
 	)
 
 	// Initialize handlers
@@ -116,17 +127,19 @@ func main() {
 
 // Config holds application configuration
 type Config struct {
-	Port          string
-	DatabaseURL   string
-	TwitterAPIKey string
+	Port            string
+	DatabaseURL     string
+	TwitterAPIKey   string
+	OpenRouterAPIKey string
 }
 
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
 	return Config{
-		Port:          getEnv("PORT", "8080"),
-		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
-		TwitterAPIKey: getEnv("TWITTER_API_KEY", ""),
+		Port:            getEnv("PORT", "8080"),
+		DatabaseURL:     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
+		TwitterAPIKey:   getEnv("TWITTER_API_KEY", ""),
+		OpenRouterAPIKey: getEnv("OPENROUTER_API_KEY", ""),
 	}
 }
 

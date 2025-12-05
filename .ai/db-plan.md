@@ -250,7 +250,7 @@ Row-level security policies ensure that user-scoped tables only reveal data matc
 Media content (images and video transcripts/summaries) is merged into the `posts.text` field. There is no separate media table.
 
 **Media Processing:**
-- Images: Max 4 per post, converted to text via Vision API
+- Images: Max 4 per post, converted to text via OpenRouter
 - Videos: Max 90 seconds or 25 MB, transcribed to text
 - Media exceeding limits are skipped without error
 

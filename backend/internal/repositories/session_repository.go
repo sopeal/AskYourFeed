@@ -10,25 +10,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/sopeal/AskYourFeed/internal/db"
 )
 
 // SessionRepository handles database operations for sessions
 type SessionRepository interface {
-	CreateSession(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) (*Session, error)
-	GetSessionByToken(ctx context.Context, token string) (*Session, error)
+	CreateSession(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) (*db.Session, error)
+	GetSessionByToken(ctx context.Context, token string) (*db.Session, error)
 	RevokeSession(ctx context.Context, token string) error
 	RevokeAllUserSessions(ctx context.Context, userID uuid.UUID) error
 	CleanupExpiredSessions(ctx context.Context) error
-}
-
-// Session represents a user session in the database
-type Session struct {
-	ID        uuid.UUID  `db:"id"`
-	UserID    uuid.UUID  `db:"user_id"`
-	TokenHash string     `db:"token_hash"`
-	CreatedAt time.Time  `db:"created_at"`
-	ExpiresAt time.Time  `db:"expires_at"`
-	RevokedAt *time.Time `db:"revoked_at"`
 }
 
 type sessionRepository struct {
@@ -47,7 +38,7 @@ func hashToken(token string) string {
 }
 
 // CreateSession creates a new session in the database
-func (r *sessionRepository) CreateSession(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) (*Session, error) {
+func (r *sessionRepository) CreateSession(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) (*db.Session, error) {
 	tokenHash := hashToken(token)
 
 	query := `
@@ -56,7 +47,7 @@ func (r *sessionRepository) CreateSession(ctx context.Context, userID uuid.UUID,
 		RETURNING id, user_id, token_hash, created_at, expires_at, revoked_at
 	`
 
-	var session Session
+	var session db.Session
 	err := r.db.QueryRowxContext(ctx, query, userID, tokenHash, expiresAt).StructScan(&session)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
@@ -66,7 +57,7 @@ func (r *sessionRepository) CreateSession(ctx context.Context, userID uuid.UUID,
 }
 
 // GetSessionByToken retrieves a session by token
-func (r *sessionRepository) GetSessionByToken(ctx context.Context, token string) (*Session, error) {
+func (r *sessionRepository) GetSessionByToken(ctx context.Context, token string) (*db.Session, error) {
 	tokenHash := hashToken(token)
 
 	query := `
@@ -77,7 +68,7 @@ func (r *sessionRepository) GetSessionByToken(ctx context.Context, token string)
 		AND expires_at > NOW()
 	`
 
-	var session Session
+	var session db.Session
 	err := r.db.GetContext(ctx, &session, query, tokenHash)
 	if err != nil {
 		if err == sql.ErrNoRows {

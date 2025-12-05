@@ -4,30 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/sopeal/AskYourFeed/internal/db"
 )
 
 // UserRepository handles database operations for users
 type UserRepository interface {
-	CreateUser(ctx context.Context, email, passwordHash, xUsername, xDisplayName string) (*User, error)
-	GetUserByEmail(ctx context.Context, email string) (*User, error)
-	GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error)
+	CreateUser(ctx context.Context, email, passwordHash, xUsername, xDisplayName string) (*db.User, error)
+	GetUserByEmail(ctx context.Context, email string) (*db.User, error)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (*db.User, error)
 	EmailExists(ctx context.Context, email string) (bool, error)
 	GetFollowingCount(ctx context.Context, userID uuid.UUID) (int, error)
-}
-
-// User represents a user in the database
-type User struct {
-	ID            uuid.UUID `db:"id"`
-	Email         string    `db:"email"`
-	PasswordHash  string    `db:"password_hash"`
-	XUsername     string    `db:"x_username"`
-	XDisplayName  string    `db:"x_display_name"`
-	CreatedAt     time.Time `db:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at"`
 }
 
 type userRepository struct {
@@ -40,14 +29,14 @@ func NewUserRepository(db *sqlx.DB) UserRepository {
 }
 
 // CreateUser creates a new user in the database
-func (r *userRepository) CreateUser(ctx context.Context, email, passwordHash, xUsername, xDisplayName string) (*User, error) {
+func (r *userRepository) CreateUser(ctx context.Context, email, passwordHash, xUsername, xDisplayName string) (*db.User, error) {
 	query := `
 		INSERT INTO users (email, password_hash, x_username, x_display_name, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, NOW(), NOW())
 		RETURNING id, email, password_hash, x_username, x_display_name, created_at, updated_at
 	`
 
-	var user User
+	var user db.User
 	err := r.db.QueryRowxContext(ctx, query, email, passwordHash, xUsername, xDisplayName).StructScan(&user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
@@ -57,14 +46,14 @@ func (r *userRepository) CreateUser(ctx context.Context, email, passwordHash, xU
 }
 
 // GetUserByEmail retrieves a user by email
-func (r *userRepository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+func (r *userRepository) GetUserByEmail(ctx context.Context, email string) (*db.User, error) {
 	query := `
 		SELECT id, email, password_hash, x_username, x_display_name, created_at, updated_at
 		FROM users
 		WHERE email = $1
 	`
 
-	var user User
+	var user db.User
 	err := r.db.GetContext(ctx, &user, query, email)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -77,14 +66,14 @@ func (r *userRepository) GetUserByEmail(ctx context.Context, email string) (*Use
 }
 
 // GetUserByID retrieves a user by ID
-func (r *userRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*User, error) {
+func (r *userRepository) GetUserByID(ctx context.Context, userID uuid.UUID) (*db.User, error) {
 	query := `
 		SELECT id, email, password_hash, x_username, x_display_name, created_at, updated_at
 		FROM users
 		WHERE id = $1
 	`
 
-	var user User
+	var user db.User
 	err := r.db.GetContext(ctx, &user, query, userID)
 	if err != nil {
 		if err == sql.ErrNoRows {

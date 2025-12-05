@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sopeal/AskYourFeed/internal/repositories"
+	"github.com/sopeal/AskYourFeed/internal/db"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -32,7 +32,7 @@ func NewLLMService() *LLMService {
 
 // GenerateAnswer generates an answer to a question based on provided posts
 // Returns the generated answer and selected source posts
-func (s *LLMService) GenerateAnswer(ctx context.Context, question string, posts []repositories.PostWithAuthor) (string, []int64, error) {
+func (s *LLMService) GenerateAnswer(ctx context.Context, question string, posts []db.PostWithAuthor) (string, []int64, error) {
 	ctx, span := llmTracer.Start(ctx, "GenerateAnswer")
 	defer span.End()
 
@@ -74,7 +74,7 @@ func (s *LLMService) GenerateAnswer(ctx context.Context, question string, posts 
 }
 
 // formatPostsForLLM formats posts chronologically with metadata
-func (s *LLMService) formatPostsForLLM(posts []repositories.PostWithAuthor) string {
+func (s *LLMService) formatPostsForLLM(posts []db.PostWithAuthor) string {
 	if len(posts) == 0 {
 		return ""
 	}
@@ -126,7 +126,7 @@ Please answer the question based on the posts above. Structure your answer with 
 
 // callLLMAPI simulates calling the actual LLM API
 // In production, this would use OpenAI SDK, Anthropic SDK, or HTTP client
-func (s *LLMService) callLLMAPI(ctx context.Context, systemPrompt, userPrompt string, posts []repositories.PostWithAuthor) (string, []int64, error) {
+func (s *LLMService) callLLMAPI(ctx context.Context, systemPrompt, userPrompt string, posts []db.PostWithAuthor) (string, []int64, error) {
 	// TODO: Replace with actual LLM API call
 	// Example for OpenAI:
 	// client := openai.NewClient(apiKey)
@@ -211,7 +211,7 @@ func (s *LLMService) selectSourceIndices(postCount int) []int {
 }
 
 // ensureMinimumSources ensures at least minCount sources are returned if available
-func (s *LLMService) ensureMinimumSources(sourceIDs []int64, posts []repositories.PostWithAuthor, minCount int) []int64 {
+func (s *LLMService) ensureMinimumSources(sourceIDs []int64, posts []db.PostWithAuthor, minCount int) []int64 {
 	if len(sourceIDs) >= minCount || len(posts) <= minCount {
 		return sourceIDs
 	}

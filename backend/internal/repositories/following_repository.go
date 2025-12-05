@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/sopeal/AskYourFeed/internal/db"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -25,18 +26,9 @@ func NewFollowingRepository(database *sqlx.DB) *FollowingRepository {
 	}
 }
 
-// FollowingItem represents a joined result from user_following and authors tables
-type FollowingItem struct {
-	XAuthorID     int64      `db:"x_author_id"`
-	Handle        string     `db:"handle"`
-	DisplayName   *string    `db:"display_name"`
-	LastSeenAt    *time.Time `db:"last_seen_at"`
-	LastCheckedAt *time.Time `db:"last_checked_at"`
-}
-
 // GetFollowing retrieves list of authors the user follows
 // Returns items ordered by x_author_id DESC
-func (r *FollowingRepository) GetFollowing(ctx context.Context, userID uuid.UUID) ([]FollowingItem, error) {
+func (r *FollowingRepository) GetFollowing(ctx context.Context, userID uuid.UUID) ([]db.FollowingItem, error) {
 	ctx, span := followingRepoTracer.Start(ctx, "GetFollowing")
 	defer span.End()
 
@@ -58,7 +50,7 @@ func (r *FollowingRepository) GetFollowing(ctx context.Context, userID uuid.UUID
 	`
 	args := []interface{}{userID}
 
-	var items []FollowingItem
+	var items []db.FollowingItem
 	err := r.db.SelectContext(ctx, &items, query, args...)
 	if err != nil {
 		span.RecordError(err)
@@ -67,7 +59,7 @@ func (r *FollowingRepository) GetFollowing(ctx context.Context, userID uuid.UUID
 
 	// Return empty slice if no items found (not an error)
 	if items == nil {
-		items = []FollowingItem{}
+		items = []db.FollowingItem{}
 	}
 
 	span.SetAttributes(attribute.Int("items_found", len(items)))

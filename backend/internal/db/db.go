@@ -71,3 +71,40 @@ type IngestRun struct {
 	RateLimitHits int        `db:"rate_limit_hits"`
 	ErrText       *string    `db:"err_text"` // Nullable in DB
 }
+
+// FollowingItem represents a joined result from user_following and authors tables
+type FollowingItem struct {
+	XAuthorID     int64      `db:"x_author_id"`
+	Handle        string     `db:"handle"`
+	DisplayName   *string    `db:"display_name"`
+	LastSeenAt    *time.Time `db:"last_seen_at"`
+	LastCheckedAt *time.Time `db:"last_checked_at"`
+}
+
+// PostWithAuthor represents a post with author information
+type PostWithAuthor struct {
+	Post
+	Handle      string  `db:"handle"`
+	DisplayName *string `db:"display_name"`
+}
+
+// Session represents a user session in the database
+type Session struct {
+	ID        uuid.UUID  `db:"id"`
+	UserID    uuid.UUID  `db:"user_id"`
+	TokenHash string     `db:"token_hash"`
+	CreatedAt time.Time  `db:"created_at"`
+	ExpiresAt time.Time  `db:"expires_at"`
+	RevokedAt *time.Time `db:"revoked_at"`
+}
+
+// User represents a user in the database
+type User struct {
+	ID           uuid.UUID `db:"id"`
+	Email        string    `db:"email"`
+	PasswordHash string    `db:"password_hash"`
+	XUsername    string    `db:"x_username"`
+	XDisplayName string    `db:"x_display_name"`
+	CreatedAt    time.Time `db:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"`
+}

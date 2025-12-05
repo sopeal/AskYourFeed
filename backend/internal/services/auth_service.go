@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sopeal/AskYourFeed/internal/db"
 	"github.com/sopeal/AskYourFeed/internal/dto"
 	"github.com/sopeal/AskYourFeed/internal/repositories"
 	"golang.org/x/crypto/bcrypt"
@@ -20,7 +21,7 @@ type AuthService interface {
 	Register(ctx context.Context, cmd dto.RegisterCommand) (*dto.RegisterResponseDTO, error)
 	Login(ctx context.Context, cmd dto.LoginCommand) (*dto.LoginResponseDTO, error)
 	Logout(ctx context.Context, token string) error
-	ValidateSession(ctx context.Context, token string) (*repositories.User, error)
+	ValidateSession(ctx context.Context, token string) (*db.User, error)
 	GetCurrentSession(ctx context.Context, userID uuid.UUID) (*dto.SessionDTO, error)
 }
 
@@ -158,7 +159,7 @@ func (s *authService) Logout(ctx context.Context, token string) error {
 }
 
 // ValidateSession validates a session token and returns the user
-func (s *authService) ValidateSession(ctx context.Context, token string) (*repositories.User, error) {
+func (s *authService) ValidateSession(ctx context.Context, token string) (*db.User, error) {
 	// Get session by token
 	session, err := s.sessionRepo.GetSessionByToken(ctx, token)
 	if err != nil {

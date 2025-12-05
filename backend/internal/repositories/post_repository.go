@@ -16,13 +16,6 @@ import (
 
 var postRepoTracer = otel.Tracer("post_repository")
 
-// PostWithAuthor represents a post with author information
-type PostWithAuthor struct {
-	db.Post
-	Handle      string  `db:"handle"`
-	DisplayName *string `db:"display_name"`
-}
-
 // PostRepository handles post data access operations
 type PostRepository struct {
 	db *sqlx.DB
@@ -38,7 +31,7 @@ func NewPostRepository(database *sqlx.DB) *PostRepository {
 // GetPostsByDateRange fetches posts within a specified date range for a user
 // Returns posts ordered chronologically (published_at ASC)
 // Uses RLS to ensure user can only access their own posts
-func (r *PostRepository) GetPostsByDateRange(ctx context.Context, userID uuid.UUID, dateFrom, dateTo time.Time) ([]PostWithAuthor, error) {
+func (r *PostRepository) GetPostsByDateRange(ctx context.Context, userID uuid.UUID, dateFrom, dateTo time.Time) ([]db.PostWithAuthor, error) {
 	ctx, span := postRepoTracer.Start(ctx, "GetPostsByDateRange")
 	defer span.End()
 
@@ -71,7 +64,7 @@ func (r *PostRepository) GetPostsByDateRange(ctx context.Context, userID uuid.UU
 		LIMIT 100
 	`
 
-	var posts []PostWithAuthor
+	var posts []db.PostWithAuthor
 	err := r.db.SelectContext(ctx, &posts, query, userID, dateFrom, dateTo)
 	if err != nil {
 		span.RecordError(err)

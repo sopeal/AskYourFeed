@@ -57,8 +57,8 @@ type UserData struct {
 	Description     string `json:"description"`
 	Location        string `json:"location"`
 	IsBlueVerified  bool   `json:"isBlueVerified"`
-	Followers       int    `json:"followers_count"`
-	Following       int    `json:"following_count"`
+	Followers       int    `json:"followers"`
+	Following       int    `json:"following"`
 	CanDm           bool   `json:"canDm"`
 	CreatedAt       string `json:"createdAt"`
 	FavouritesCount int    `json:"favouritesCount"`
@@ -75,10 +75,16 @@ type FollowingResponse struct {
 
 // TweetResponse represents the response from tweet endpoints
 type TweetResponse struct {
-	Tweets      []TweetData `json:"tweets"`
-	HasNextPage bool        `json:"has_next_page"`
-	NextCursor  string      `json:"next_cursor"`
-	Status      string      `json:"status"`
+	Data        TweetDataWrapper `json:"data"`
+	HasNextPage bool             `json:"has_next_page"`
+	NextCursor  string           `json:"next_cursor"`
+	Status      string           `json:"status"`
+	Tweets      []TweetData      `json:"-"` // Populated from Data.Tweets after unmarshaling
+}
+
+// TweetDataWrapper wraps the tweets array in the data field
+type TweetDataWrapper struct {
+	Tweets []TweetData `json:"tweets"`
 }
 
 // TweetData represents tweet information
@@ -266,6 +272,9 @@ func (c *TwitterClient) GetUserTweets(ctx context.Context, username string, curs
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
+
+	// Populate Tweets from Data.Tweets
+	resp.Tweets = resp.Data.Tweets
 
 	span.SetAttributes(
 		attribute.Int("tweets_count", len(resp.Tweets)),

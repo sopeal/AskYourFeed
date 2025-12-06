@@ -47,27 +47,27 @@ type UserResponse struct {
 
 // UserData represents user information
 type UserData struct {
-	Type           string `json:"type"`
-	ID             string `json:"id"`
-	UserName       string `json:"userName"`
-	Name           string `json:"name"`
-	URL            string `json:"url"`
-	ProfilePicture string `json:"profilePicture"`
-	CoverPicture   string `json:"coverPicture"`
-	Description    string `json:"description"`
-	Location       string `json:"location"`
-	IsBlueVerified bool   `json:"isBlueVerified"`
-	Followers      int    `json:"followers"`
-	Following      int    `json:"following"`
-	CanDm          bool   `json:"canDm"`
-	CreatedAt      string `json:"createdAt"`
-	FavouritesCount int   `json:"favouritesCount"`
-	StatusesCount  int    `json:"statusesCount"`
+	Type            string `json:"type"`
+	ID              string `json:"id"`
+	UserName        string `json:"userName"`
+	Name            string `json:"name"`
+	URL             string `json:"url"`
+	ProfilePicture  string `json:"profilePicture"`
+	CoverPicture    string `json:"coverPicture"`
+	Description     string `json:"description"`
+	Location        string `json:"location"`
+	IsBlueVerified  bool   `json:"isBlueVerified"`
+	Followers       int    `json:"followers_count"`
+	Following       int    `json:"following_count"`
+	CanDm           bool   `json:"canDm"`
+	CreatedAt       string `json:"createdAt"`
+	FavouritesCount int    `json:"favouritesCount"`
+	StatusesCount   int    `json:"statusesCount"`
 }
 
 // FollowingResponse represents the response from user followings endpoint
 type FollowingResponse struct {
-	Users       []UserData `json:"users"`
+	Users       []UserData `json:"followings"`
 	HasNextPage bool       `json:"has_next_page"`
 	NextCursor  string     `json:"next_cursor"`
 	Status      string     `json:"status"`

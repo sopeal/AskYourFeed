@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/oklog/ulid/v2"
+	"github.com/sopeal/AskYourFeed/internal/dto"
 	"github.com/sopeal/AskYourFeed/internal/repositories"
 	"github.com/sopeal/AskYourFeed/pkg/logger"
 	"go.opentelemetry.io/otel"
@@ -21,10 +21,10 @@ var ingestionServiceTracer = otel.Tracer("ingestion_service")
 const (
 	// MaxFollowingLimit is the maximum number of followed users to sync (MVP limit)
 	MaxFollowingLimit = 150
-	
+
 	// MaxRetries is the maximum number of retries for rate-limited requests
 	MaxRetries = 3
-	
+
 	// BaseBackoffDelay is the base delay for exponential backoff (in seconds)
 	BaseBackoffDelay = 2
 )
@@ -112,13 +112,13 @@ func (s *IngestService) IngestUserData(ctx context.Context, userID uuid.UUID, ba
 	if err != nil {
 		// Mark run as failed
 		errText := err.Error()
-		
+
 		// Determine status based on error type
 		status := "error"
 		if strings.Contains(errText, "429") || strings.Contains(errText, "rate limit") {
 			status = "rate_limited"
 		}
-		
+
 		s.ingestRepo.CompleteIngestRun(ctx, runID, status, totalFetched, &errText)
 		span.RecordError(err)
 		return fmt.Errorf("ingestion failed: %w", err)
@@ -145,12 +145,12 @@ func (s *IngestService) IngestUserData(ctx context.Context, userID uuid.UUID, ba
 		attribute.Int("rate_limit_hits", rateLimitHits),
 		attribute.Int("retried", retried),
 	)
-	
+
 	logger.Info("ingestion completed successfully",
 		"user_id", userID,
 		"run_id", runID,
 		"total_fetched", totalFetched)
-	
+
 	return nil
 }
 
@@ -195,7 +195,7 @@ func (s *IngestService) performIngestion(ctx context.Context, userID uuid.UUID, 
 		attribute.Int("total_rate_limit_hits", totalRateLimitHits),
 		attribute.Int("total_retried", totalRetried),
 	)
-	
+
 	return totalFetched, totalRateLimitHits, totalRetried, nil
 }
 
@@ -277,12 +277,12 @@ func (s *IngestService) ingestFollowing(ctx context.Context, userID uuid.UUID, x
 		attribute.Int("rate_limit_hits", rateLimitHits),
 		attribute.Int("retried", retried),
 	)
-	
+
 	logger.Info("following ingestion completed",
 		"user_id", userID,
 		"fetched", fetched,
 		"rate_limit_hits", rateLimitHits)
-	
+
 	return fetched, rateLimitHits, retried, nil
 }
 
@@ -306,7 +306,7 @@ func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runI
 	fetched := 0
 	rateLimitHits := 0
 	retried := 0
-	
+
 	// Calculate backfill cutoff time
 	backfillCutoff := time.Now().Add(-time.Duration(backfillHours) * time.Hour)
 	isBackfill := backfillHours > 0
@@ -365,13 +365,13 @@ func (s *IngestService) ingestTweets(ctx context.Context, userID uuid.UUID, runI
 		attribute.Int("rate_limit_hits", rateLimitHits),
 		attribute.Int("retried", retried),
 	)
-	
+
 	logger.Info("tweets ingestion completed",
 		"user_id", userID,
 		"fetched", fetched,
 		"authors_processed", len(following),
 		"rate_limit_hits", rateLimitHits)
-	
+
 	return fetched, rateLimitHits, retried, nil
 }
 
@@ -569,7 +569,7 @@ func (s *IngestService) getFollowingsWithRetry(ctx context.Context, username str
 		// Check if it's a rate limit error (429)
 		if strings.Contains(err.Error(), "429") {
 			rateLimitHits++
-			
+
 			if attempt < MaxRetries {
 				retried++
 				backoffDelay := time.Duration(math.Pow(float64(BaseBackoffDelay), float64(attempt+1))) * time.Second
@@ -578,7 +578,7 @@ func (s *IngestService) getFollowingsWithRetry(ctx context.Context, username str
 					"max_retries", MaxRetries,
 					"backoff_delay", backoffDelay,
 					"username", username)
-				
+
 				time.Sleep(backoffDelay)
 				continue
 			}
@@ -605,7 +605,7 @@ func (s *IngestService) getTweetsWithRetry(ctx context.Context, username string,
 		// Check if it's a rate limit error (429)
 		if strings.Contains(err.Error(), "429") {
 			rateLimitHits++
-			
+
 			if attempt < MaxRetries {
 				retried++
 				backoffDelay := time.Duration(math.Pow(float64(BaseBackoffDelay), float64(attempt+1))) * time.Second
@@ -614,7 +614,7 @@ func (s *IngestService) getTweetsWithRetry(ctx context.Context, username string,
 					"max_retries", MaxRetries,
 					"backoff_delay", backoffDelay,
 					"username", username)
-				
+
 				time.Sleep(backoffDelay)
 				continue
 			}
@@ -641,7 +641,7 @@ func (s *IngestService) processMedia(ctx context.Context, tweet *TweetData, twee
 	// Process images (max 4)
 	if len(tweet.Media.Photos) > 0 {
 		span.SetAttributes(attribute.Int("photo_count", len(tweet.Media.Photos)))
-		
+
 		// Collect image URLs (limit to MaxImagesPerPost)
 		imageURLs := make([]string, 0, len(tweet.Media.Photos))
 		for i, photo := range tweet.Media.Photos {
@@ -677,15 +677,15 @@ func (s *IngestService) processMedia(ctx context.Context, tweet *TweetData, twee
 	// Process videos
 	if len(tweet.Media.Videos) > 0 {
 		span.SetAttributes(attribute.Int("video_count", len(tweet.Media.Videos)))
-		
+
 		for i, video := range tweet.Media.Videos {
 			// Calculate duration in seconds
 			durationSeconds := video.DurationMs / 1000
-			
+
 			// Estimate size (we don't have exact size from API, so we skip size check)
 			// In a real implementation, you might need to fetch the video to check size
 			sizeBytes := int64(0) // Unknown size
-			
+
 			// Try to transcribe video
 			transcription, err := s.openRouterClient.TranscribeVideo(ctx, video.URL, durationSeconds, sizeBytes)
 			if err != nil {
@@ -713,7 +713,7 @@ func (s *IngestService) processMedia(ctx context.Context, tweet *TweetData, twee
 					continue
 				}
 			}
-			
+
 			if transcription != "" {
 				mediaDescriptions = append(mediaDescriptions, fmt.Sprintf("[Video %d transcription: %s]", i+1, transcription))
 				span.SetAttributes(attribute.Int("videos_transcribed", i+1))
@@ -726,13 +726,13 @@ func (s *IngestService) processMedia(ctx context.Context, tweet *TweetData, twee
 		originalText := tweetDTO.Text
 		mediaText := strings.Join(mediaDescriptions, " ")
 		tweetDTO.Text = originalText + "\n\n" + mediaText
-		
+
 		span.SetAttributes(
 			attribute.Int("media_descriptions_count", len(mediaDescriptions)),
 			attribute.Int("original_text_length", len(originalText)),
 			attribute.Int("final_text_length", len(tweetDTO.Text)),
 		)
-		
+
 		logger.Info("media processed and added to tweet text",
 			"tweet_id", tweet.ID,
 			"media_count", len(mediaDescriptions),

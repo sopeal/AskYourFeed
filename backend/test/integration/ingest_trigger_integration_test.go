@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,12 +12,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/sopeal/AskYourFeed/internal/db"
+	"github.com/sopeal/AskYourFeed/pkg/logger"
 )
 
 // TestIngestTriggerIntegration contains all integration tests for the ingest trigger endpoint
 func TestIngestTriggerIntegration(t *testing.T) {
 	// Set Gin to test mode
 	gin.SetMode(gin.TestMode)
+
+	// Initialize logger for tests
+	logger.Init(slog.LevelInfo)
 
 	// Initialize test database
 	dbHelper := NewDatabaseHelper(t)

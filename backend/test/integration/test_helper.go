@@ -34,8 +34,10 @@ func NewTestRouterWithClient(db *sqlx.DB, httpClient *http.Client) *TestRouter {
 	followingRepo := repositories.NewFollowingRepository(db)
 	postRepo := repositories.NewPostRepository(db)
 	authorRepo := repositories.NewAuthorRepository(db)
+	userRepo := repositories.NewUserRepository(db)
 	twitterClient := services.NewTwitterClient("", httpClient) // Empty API key for testing
-	ingestService := services.NewIngestService(twitterClient, ingestRepo, followingRepo, postRepo, authorRepo)
+	openRouterClient := services.NewOpenRouterClient("", httpClient) // Empty API key for testing
+	ingestService := services.NewIngestService(twitterClient, openRouterClient, ingestRepo, followingRepo, postRepo, authorRepo, userRepo)
 	ingestStatusService := services.NewIngestStatusService(ingestRepo)
 	ingestHandler := handlers.NewIngestHandler(ingestStatusService, ingestService)
 

@@ -188,7 +188,7 @@ func (h *IngestHandler) TriggerIngest(c *gin.Context) {
 	// Return immediate response indicating ingestion was triggered
 	response := dto.TriggerIngestResponseDTO{
 		IngestRunID: runID,
-		Status:      "started",
+		Status:      "triggered",
 		StartedAt:   startedAt,
 	}
 

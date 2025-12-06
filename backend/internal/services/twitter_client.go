@@ -20,7 +20,7 @@ var twitterClientTracer = otel.Tracer("twitter_client")
 // TwitterClient handles communication with twitterapi.io
 type TwitterClient struct {
 	apiKey     string
-	baseURL    string
+	BaseURL    string // Exported for testing
 	httpClient *http.Client
 }
 
@@ -33,7 +33,7 @@ func NewTwitterClient(apiKey string, httpClient *http.Client) *TwitterClient {
 	}
 	return &TwitterClient{
 		apiKey:     apiKey,
-		baseURL:    "https://api.twitterapi.io",
+		BaseURL:    "https://api.twitterapi.io",
 		httpClient: httpClient,
 	}
 }
@@ -144,7 +144,7 @@ func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string
 		attribute.String("endpoint", endpoint),
 	)
 
-	reqURL := c.baseURL + endpoint
+	reqURL := c.BaseURL + endpoint
 	if len(params) > 0 {
 		reqURL += "?" + params.Encode()
 	}

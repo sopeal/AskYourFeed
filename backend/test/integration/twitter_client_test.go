@@ -1,4 +1,4 @@
-package services
+package integration
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/sopeal/AskYourFeed/internal/services"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -110,7 +112,7 @@ func TestGetUserTweets(t *testing.T) {
 		mockStatusCode int
 		mockResponse   string
 		wantErr        bool
-		validateResult func(t *testing.T, resp *TweetResponse)
+		validateResult func(t *testing.T, resp *services.TweetResponse)
 	}{
 		{
 			name:           "successful request without cursor",
@@ -119,7 +121,7 @@ func TestGetUserTweets(t *testing.T) {
 			mockStatusCode: http.StatusOK,
 			mockResponse:   mockResponse,
 			wantErr:        false,
-			validateResult: func(t *testing.T, resp *TweetResponse) {
+			validateResult: func(t *testing.T, resp *services.TweetResponse) {
 				assert.NotNil(t, resp)
 				assert.Equal(t, "success", resp.Status)
 				assert.True(t, resp.HasNextPage)
@@ -173,7 +175,7 @@ func TestGetUserTweets(t *testing.T) {
 			mockStatusCode: http.StatusOK,
 			mockResponse:   mockResponse,
 			wantErr:        false,
-			validateResult: func(t *testing.T, resp *TweetResponse) {
+			validateResult: func(t *testing.T, resp *services.TweetResponse) {
 				assert.NotNil(t, resp)
 				assert.Len(t, resp.Tweets, 2)
 			},
@@ -231,8 +233,8 @@ func TestGetUserTweets(t *testing.T) {
 			defer server.Close()
 
 			// Create Twitter client with mock server URL
-			client := NewTwitterClient("test-api-key", server.Client())
-			client.baseURL = server.URL
+			client := services.NewTwitterClient("test-api-key", server.Client())
+			client.BaseURL = server.URL
 
 			// Call the function
 			ctx := context.Background()
@@ -266,8 +268,8 @@ func TestGetUserTweets_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTwitterClient("test-api-key", server.Client())
-	client.baseURL = server.URL
+	client := services.NewTwitterClient("test-api-key", server.Client())
+	client.BaseURL = server.URL
 
 	// Create a context that is already cancelled
 	ctx, cancel := context.WithCancel(context.Background())
@@ -321,8 +323,8 @@ func TestGetUserTweets_ResponseStructure(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewTwitterClient("test-api-key", server.Client())
-	client.baseURL = server.URL
+	client := services.NewTwitterClient("test-api-key", server.Client())
+	client.BaseURL = server.URL
 
 	resp, err := client.GetUserTweets(context.Background(), "testuser", "")
 

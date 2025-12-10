@@ -419,7 +419,8 @@ func (s *IngestService) ingestTweetsForAuthor(
 			}
 
 			// Parse tweet timestamp for temporal filtering
-			tweetTime, err := time.Parse(time.RFC3339, tweet.CreatedAt)
+			// Twitter uses RubyDate format: "Mon Jan 02 15:04:05 -0700 2006"
+			tweetTime, err := time.Parse(time.RubyDate, tweet.CreatedAt)
 			if err != nil {
 				logger.Warn("failed to parse tweet timestamp, skipping",
 					"error", err,

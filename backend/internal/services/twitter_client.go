@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sopeal/AskYourFeed/internal/dto"
@@ -287,7 +288,8 @@ func (c *TwitterClient) GetUserTweets(ctx context.Context, username string, curs
 // ConvertToDTO converts TweetData to TweetDTO
 func (c *TwitterClient) ConvertToDTO(tweet TweetData) *dto.TweetDTO {
 	// Parse created_at timestamp
-	createdAt, err := time.Parse(time.RFC3339, tweet.CreatedAt)
+	// Twitter uses RubyDate format: "Mon Jan 02 15:04:05 -0700 2006"
+	createdAt, err := time.Parse(time.RubyDate, tweet.CreatedAt)
 	if err != nil {
 		// Fallback to current time if parsing fails
 		createdAt = time.Now()
@@ -311,20 +313,42 @@ func (c *TwitterClient) ConvertToDTO(tweet TweetData) *dto.TweetDTO {
 		conversationID = 0
 	}
 
+	// Normalize URL to ensure it matches the database constraint
+	// The constraint requires: ^https?://(x|twitter)\.com/.+/status/\d+
+	// If the URL is empty or invalid, construct it from the tweet ID and author handle
+	tweetURL := tweet.URL
+	if tweetURL == "" || !c.isValidTwitterURL(tweetURL) {
+		// Construct URL from author handle and tweet ID
+		tweetURL = fmt.Sprintf("https://twitter.com/%s/status/%s", tweet.Author.UserName, tweet.ID)
+	}
+
 	return &dto.TweetDTO{
 		ID:             tweetID,
 		AuthorID:       authorID,
 		Text:           tweet.Text,
-		URL:            tweet.URL,
+		URL:            tweetURL,
 		PublishedAt:    createdAt,
 		ConversationID: conversationID,
 	}
 }
 
+// isValidTwitterURL checks if a URL matches the expected Twitter/X URL format
+func (c *TwitterClient) isValidTwitterURL(url string) bool {
+	// Check if URL matches the pattern: https?://(x|twitter)\.com/.+/status/\d+
+	// This is a simple check - the database will do the final validation
+	return len(url) > 0 && 
+		(strings.HasPrefix(url, "https://twitter.com/") || 
+		 strings.HasPrefix(url, "http://twitter.com/") ||
+		 strings.HasPrefix(url, "https://x.com/") || 
+		 strings.HasPrefix(url, "http://x.com/")) &&
+		strings.Contains(url, "/status/")
+}
+
 // ConvertUserToDTO converts UserData to UserDTO
 func (c *TwitterClient) ConvertUserToDTO(user UserData) *dto.UserDTO {
 	// Parse created_at timestamp
-	createdAt, err := time.Parse(time.RFC3339, user.CreatedAt)
+	// Twitter uses RubyDate format: "Mon Jan 02 15:04:05 -0700 2006"
+	createdAt, err := time.Parse(time.RubyDate, user.CreatedAt)
 	if err != nil {
 		createdAt = time.Now()
 	}

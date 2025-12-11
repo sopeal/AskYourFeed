@@ -75,6 +75,51 @@ func TestURLValidation(t *testing.T) {
 			},
 			expectedURL: "https://twitter.com/MorawieckiM/status/1995915875489382540",
 		},
+		{
+			name: "URL with query parameters - should remove them",
+			tweetData: services.TweetData{
+				ID:  "1998849925971673364",
+				URL: "https://x.com/MorawieckiM/status/1998849925971673364?s=20&t=abc123",
+				Author: services.UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1998849925971673364",
+			},
+			expectedURL: "https://x.com/MorawieckiM/status/1998849925971673364",
+		},
+		{
+			name: "URL with fragment - should remove it",
+			tweetData: services.TweetData{
+				ID:  "1998849925971673364",
+				URL: "https://twitter.com/MorawieckiM/status/1998849925971673364#reply",
+				Author: services.UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1998849925971673364",
+			},
+			expectedURL: "https://twitter.com/MorawieckiM/status/1998849925971673364",
+		},
+		{
+			name: "URL with both query and fragment - should remove both",
+			tweetData: services.TweetData{
+				ID:  "1998849925971673364",
+				URL: "https://x.com/MorawieckiM/status/1998849925971673364?s=20#reply",
+				Author: services.UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1998849925971673364",
+			},
+			expectedURL: "https://x.com/MorawieckiM/status/1998849925971673364",
+		},
 	}
 
 	for _, tt := range tests {

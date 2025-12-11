@@ -315,11 +315,14 @@ func (c *TwitterClient) ConvertToDTO(tweet TweetData) *dto.TweetDTO {
 
 	// Normalize URL to ensure it matches the database constraint
 	// The constraint requires: ^https?://(x|twitter)\.com/.+/status/\d+
-	// If the URL is empty or invalid, construct it from the tweet ID and author handle
+	// Remove query parameters and fragments that might be present in the API response
 	tweetURL := tweet.URL
-	if tweetURL == "" || !c.isValidTwitterURL(tweetURL) {
+	if tweetURL == "" {
 		// Construct URL from author handle and tweet ID
 		tweetURL = fmt.Sprintf("https://twitter.com/%s/status/%s", tweet.Author.UserName, tweet.ID)
+	} else {
+		// Clean the URL by removing query parameters and fragments
+		tweetURL = c.normalizeTwitterURL(tweetURL, tweet.Author.UserName, tweet.ID)
 	}
 
 	return &dto.TweetDTO{
@@ -330,6 +333,44 @@ func (c *TwitterClient) ConvertToDTO(tweet TweetData) *dto.TweetDTO {
 		PublishedAt:    createdAt,
 		ConversationID: conversationID,
 	}
+}
+
+// normalizeTwitterURL cleans a Twitter/X URL by removing query parameters and fragments
+// and ensuring it matches the database constraint format
+func (c *TwitterClient) normalizeTwitterURL(rawURL, authorHandle, tweetID string) string {
+	// Parse the URL to extract components
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		// If parsing fails, construct a clean URL from scratch
+		return fmt.Sprintf("https://twitter.com/%s/status/%s", authorHandle, tweetID)
+	}
+
+	// Check if it's a valid Twitter/X domain
+	if parsedURL.Host != "twitter.com" && parsedURL.Host != "x.com" && 
+	   parsedURL.Host != "www.twitter.com" && parsedURL.Host != "www.x.com" {
+		// Invalid domain, construct a clean URL
+		return fmt.Sprintf("https://twitter.com/%s/status/%s", authorHandle, tweetID)
+	}
+
+	// Extract the path and verify it contains /status/
+	if !strings.Contains(parsedURL.Path, "/status/") {
+		// Invalid path, construct a clean URL
+		return fmt.Sprintf("https://twitter.com/%s/status/%s", authorHandle, tweetID)
+	}
+
+	// Build a clean URL without query parameters or fragments
+	// Use the original scheme and host, but clean path
+	scheme := parsedURL.Scheme
+	if scheme == "" {
+		scheme = "https"
+	}
+	
+	host := parsedURL.Host
+	// Normalize to non-www version
+	host = strings.TrimPrefix(host, "www.")
+	
+	// Return clean URL: scheme://host/path (without query or fragment)
+	return fmt.Sprintf("%s://%s%s", scheme, host, parsedURL.Path)
 }
 
 // isValidTwitterURL checks if a URL matches the expected Twitter/X URL format

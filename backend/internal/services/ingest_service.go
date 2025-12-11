@@ -397,10 +397,10 @@ func (s *IngestService) ingestTweetsForAuthor(
 	rateLimitHits := 0
 	retried := 0
 	cursor := ""
-	shouldContinue := true
 	latestSeenAt := time.Time{}
 
-	for shouldContinue {
+	// Fetch and process tweets page by page
+	for {
 		// Get tweets from Twitter API with retry logic
 		resp, hits, retries, err := s.getTweetsWithRetry(ctx, authorHandle, cursor)
 		if err != nil {
@@ -410,101 +410,33 @@ func (s *IngestService) ingestTweetsForAuthor(
 		rateLimitHits += hits
 		retried += retries
 
-		// Process each tweet
-		tweetsInPage := 0
-		for _, tweet := range resp.Tweets {
-			// Only ingest original posts (filters out retweets, quote tweets, but allows self-replies)
-			if !s.twitterClient.IsOriginalPost(tweet) {
-				continue
-			}
+		// Process each tweet in the current page
+		tweetsInPage, reachedCutoff := s.processTweetPage(
+			ctx, userID, authorHandle, resp.Tweets,
+			backfillCutoff, isBackfill, &latestSeenAt, &fetched,
+		)
 
-			// Parse tweet timestamp for temporal filtering
-			// Twitter uses RubyDate format: "Mon Jan 02 15:04:05 -0700 2006"
-			tweetTime, err := time.Parse(time.RubyDate, tweet.CreatedAt)
-			if err != nil {
-				logger.Warn("failed to parse tweet timestamp, skipping",
-					"error", err,
-					"tweet_id", tweet.ID,
-					"created_at", tweet.CreatedAt)
-				continue
-			}
-
-			// Temporal filtering: skip tweets older than backfill cutoff
-			if isBackfill && tweetTime.Before(backfillCutoff) {
-				logger.Debug("reached backfill cutoff, stopping pagination",
-					"author_handle", authorHandle,
-					"tweet_time", tweetTime,
-					"cutoff", backfillCutoff)
-				shouldContinue = false
-				break
-			}
-
-			// Track latest seen timestamp for author update
-			if latestSeenAt.IsZero() || tweetTime.After(latestSeenAt) {
-				latestSeenAt = tweetTime
-			}
-
-			// Convert to DTO
-			tweetDTO := s.twitterClient.ConvertToDTO(tweet)
-
-			// Process media (images and videos) if OpenRouter client is available
-			if s.openRouterClient != nil {
-				err := s.processMedia(ctx, &tweet, tweetDTO)
-				if err != nil {
-					logger.Warn("failed to process media, continuing without media descriptions",
-						"error", err,
-						"tweet_id", tweet.ID,
-						"author_handle", authorHandle)
-					// Continue processing the tweet without media descriptions
-				}
-			}
-
-			// Check if tweet already exists
-			exists, err := s.postRepo.PostExists(ctx, userID, tweetDTO.ID)
-			if err != nil {
-				logger.Warn("failed to check if post exists, skipping",
-					"error", err,
-					"post_id", tweetDTO.ID,
-					"author_handle", authorHandle)
-				continue
-			}
-
-			if exists {
-				continue // Skip existing tweets
-			}
-
-			// Insert the tweet
-			err = s.postRepo.InsertPost(ctx, userID, tweetDTO)
-			if err != nil {
-				logger.Error("failed to insert post",
-					err,
-					"post_id", tweetDTO.ID,
-					"author_handle", authorHandle,
-					"user_id", userID)
-				continue
-			}
-
-			fetched++
-			tweetsInPage++
-		}
-
-		// For regular ingest (not backfill), only fetch first page
+		// Stop conditions for pagination
 		if !isBackfill {
+			// For regular ingest (not backfill), only fetch first page
 			logger.Debug("regular ingest: stopping after first page",
 				"author_handle", authorHandle,
 				"tweets_fetched", tweetsInPage)
 			break
 		}
 
-		// Check if we have more pages
-		if !resp.HasNextPage {
-			shouldContinue = false
+		if reachedCutoff {
+			// Reached backfill cutoff time
 			break
 		}
 
-		cursor = resp.NextCursor
+		if !resp.HasNextPage {
+			// No more pages available
+			break
+		}
 
-		// Add delay between pages
+		// Move to next page
+		cursor = resp.NextCursor
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -525,6 +457,108 @@ func (s *IngestService) ingestTweetsForAuthor(
 	)
 
 	return fetched, rateLimitHits, retried, nil
+}
+
+// processTweetPage processes a page of tweets and returns the count and whether backfill cutoff was reached
+func (s *IngestService) processTweetPage(
+	ctx context.Context,
+	userID uuid.UUID,
+	authorHandle string,
+	tweets []TweetData,
+	backfillCutoff time.Time,
+	isBackfill bool,
+	latestSeenAt *time.Time,
+	totalFetched *int,
+) (int, bool) {
+	tweetsInPage := 0
+	reachedCutoff := false
+
+	for _, tweet := range tweets {
+		// Only ingest original posts (filters out retweets, quote tweets, but allows self-replies)
+		if !s.twitterClient.IsOriginalPost(tweet) {
+			continue
+		}
+
+		// Parse and validate tweet timestamp
+		tweetTime, err := time.Parse(time.RubyDate, tweet.CreatedAt)
+		if err != nil {
+			logger.Warn("failed to parse tweet timestamp, skipping",
+				"error", err,
+				"tweet_id", tweet.ID,
+				"created_at", tweet.CreatedAt)
+			continue
+		}
+
+		// Check if we've reached the backfill cutoff time
+		if isBackfill && tweetTime.Before(backfillCutoff) {
+			logger.Debug("reached backfill cutoff, stopping pagination",
+				"author_handle", authorHandle,
+				"tweet_time", tweetTime,
+				"cutoff", backfillCutoff)
+			reachedCutoff = true
+			break
+		}
+
+		// Track the latest tweet timestamp for author update
+		if latestSeenAt.IsZero() || tweetTime.After(*latestSeenAt) {
+			*latestSeenAt = tweetTime
+		}
+
+		// Process and store the tweet
+		if s.processSingleTweet(ctx, userID, authorHandle, &tweet) {
+			*totalFetched++
+			tweetsInPage++
+		}
+	}
+
+	return tweetsInPage, reachedCutoff
+}
+
+// processSingleTweet processes and stores a single tweet, returns true if successfully stored
+func (s *IngestService) processSingleTweet(
+	ctx context.Context,
+	userID uuid.UUID,
+	authorHandle string,
+	tweet *TweetData,
+) bool {
+	// Convert tweet to DTO
+	tweetDTO := s.twitterClient.ConvertToDTO(*tweet)
+
+	// Process media (images and videos) if OpenRouter client is available
+	if s.openRouterClient != nil {
+		if err := s.processMedia(ctx, tweet, tweetDTO); err != nil {
+			logger.Warn("failed to process media, continuing without media descriptions",
+				"error", err,
+				"tweet_id", tweet.ID,
+				"author_handle", authorHandle)
+		}
+	}
+
+	// Check if tweet already exists in database
+	exists, err := s.postRepo.PostExists(ctx, userID, tweetDTO.ID)
+	if err != nil {
+		logger.Warn("failed to check if post exists, skipping",
+			"error", err,
+			"post_id", tweetDTO.ID,
+			"author_handle", authorHandle)
+		return false
+	}
+
+	if exists {
+		return false // Skip existing tweets
+	}
+
+	// Insert the tweet into database
+	if err := s.postRepo.InsertPost(ctx, userID, tweetDTO); err != nil {
+		logger.Error("failed to insert post",
+			err,
+			"post_id", tweetDTO.ID,
+			"author_handle", authorHandle,
+			"user_id", userID)
+		return false
+	}
+
+	return true
 }
 
 // ensureAuthorExists ensures an author exists in the database

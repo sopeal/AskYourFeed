@@ -55,7 +55,7 @@ func main() {
 	// Initialize Twitter API client
 	twitterClient := services.NewTwitterClient(config.TwitterAPIKey, nil)
 
-	// Initialize OpenRouter client (optional - only if API key is provided)
+	// Initialize OpenRouter client for ingestion (optional - only if API key is provided)
 	var openRouterClient *services.OpenRouterClient
 	if config.OpenRouterAPIKey != "" {
 		openRouterClient = services.NewOpenRouterClient(config.OpenRouterAPIKey, nil)
@@ -64,8 +64,17 @@ func main() {
 		logger.Warn("OpenRouter API key not provided - media processing will be skipped")
 	}
 
+	// Initialize OpenRouter client for Q&A (separate API key)
+	var openRouterQAClient *services.OpenRouterClient
+	if config.OpenRouterQAAPIKey != "" {
+		openRouterQAClient = services.NewOpenRouterClient(config.OpenRouterQAAPIKey, nil)
+		logger.Info("OpenRouter Q&A client initialized")
+	} else {
+		logger.Warn("OpenRouter Q&A API key not provided - Q&A functionality will be unavailable")
+	}
+
 	// Initialize services
-	llmService := services.NewLLMService()
+	llmService := services.NewLLMService(openRouterQAClient)
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	ingestStatusService := services.NewIngestStatusService(ingestRepo)
 	followingService := services.NewFollowingService(followingRepo)
@@ -127,19 +136,21 @@ func main() {
 
 // Config holds application configuration
 type Config struct {
-	Port            string
-	DatabaseURL     string
-	TwitterAPIKey   string
-	OpenRouterAPIKey string
+	Port               string
+	DatabaseURL        string
+	TwitterAPIKey      string
+	OpenRouterAPIKey   string
+	OpenRouterQAAPIKey string
 }
 
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
 	return Config{
-		Port:            getEnv("PORT", "8080"),
-		DatabaseURL:     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
-		TwitterAPIKey:   getEnv("TWITTER_API_KEY", ""),
-		OpenRouterAPIKey: getEnv("OPENROUTER_API_KEY", ""),
+		Port:               getEnv("PORT", "8080"),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
+		TwitterAPIKey:      getEnv("TWITTER_API_KEY", ""),
+		OpenRouterAPIKey:   getEnv("OPENROUTER_API_KEY", ""),
+		OpenRouterQAAPIKey: getEnv("OPENROUTER_QA_API_KEY", ""),
 	}
 }
 

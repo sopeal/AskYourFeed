@@ -1,14 +1,12 @@
 package services
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
+	"github.com/sashabaranov/go-openai"
 	"github.com/sopeal/AskYourFeed/pkg/logger"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -35,70 +33,27 @@ const (
 
 // OpenRouterClient handles communication with OpenRouter API for vision and transcription
 type OpenRouterClient struct {
-	apiKey     string
-	baseURL    string
-	httpClient *http.Client
+	client *openai.Client
 }
 
 // NewOpenRouterClient creates a new OpenRouter API client
 func NewOpenRouterClient(apiKey string, httpClient *http.Client) *OpenRouterClient {
 	if httpClient == nil {
 		httpClient = &http.Client{
-			Timeout: 60 * time.Second, // Longer timeout for vision/transcription
+			Timeout: 120 * time.Second, // Longer timeout for LLM responses and vision/transcription
 		}
 	}
+
+	// Create OpenAI client configuration for OpenRouter
+	config := openai.DefaultConfig(apiKey)
+	config.BaseURL = OpenRouterBaseURL
+	config.HTTPClient = httpClient
+
+	client := openai.NewClientWithConfig(config)
+
 	return &OpenRouterClient{
-		apiKey:     apiKey,
-		baseURL:    OpenRouterBaseURL,
-		httpClient: httpClient,
+		client: client,
 	}
-}
-
-// ChatCompletionRequest represents a request to OpenRouter chat completion API
-type ChatCompletionRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-}
-
-// Message represents a chat message
-type Message struct {
-	Role    string        `json:"role"`
-	Content []ContentPart `json:"content"`
-}
-
-// ContentPart represents a part of message content (text or image)
-type ContentPart struct {
-	Type     string    `json:"type"`                // "text" or "image_url"
-	Text     string    `json:"text,omitempty"`      // For text content
-	ImageURL *ImageURL `json:"image_url,omitempty"` // For image content
-}
-
-// ImageURL represents an image URL in the message
-type ImageURL struct {
-	URL string `json:"url"`
-}
-
-// ChatCompletionResponse represents the response from OpenRouter
-type ChatCompletionResponse struct {
-	ID      string    `json:"id"`
-	Choices []Choice  `json:"choices"`
-	Error   *APIError `json:"error,omitempty"`
-}
-
-// Choice represents a completion choice
-type Choice struct {
-	Message struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"message"`
-	FinishReason string `json:"finish_reason"`
-}
-
-// APIError represents an error from OpenRouter API
-type APIError struct {
-	Message string `json:"message"`
-	Type    string `json:"type"`
-	Code    string `json:"code"`
 }
 
 // DescribeImage generates a text description of an image using vision model
@@ -108,20 +63,20 @@ func (c *OpenRouterClient) DescribeImage(ctx context.Context, imageURL string) (
 
 	span.SetAttributes(attribute.String("image_url", imageURL))
 
-	// Prepare the request
-	req := ChatCompletionRequest{
+	// Prepare the request using SDK
+	req := openai.ChatCompletionRequest{
 		Model: "openai/gpt-4o-mini", // Using GPT-4o-mini for vision (cost-effective)
-		Messages: []Message{
+		Messages: []openai.ChatCompletionMessage{
 			{
-				Role: "user",
-				Content: []ContentPart{
+				Role: openai.ChatMessageRoleUser,
+				MultiContent: []openai.ChatMessagePart{
 					{
-						Type: "text",
+						Type: openai.ChatMessagePartTypeText,
 						Text: "Describe this image in detail. Focus on the main content, text, and any important visual elements. Keep it concise but informative.",
 					},
 					{
-						Type: "image_url",
-						ImageURL: &ImageURL{
+						Type: openai.ChatMessagePartTypeImageURL,
+						ImageURL: &openai.ChatMessageImageURL{
 							URL: imageURL,
 						},
 					},
@@ -215,74 +170,26 @@ func (c *OpenRouterClient) TranscribeVideo(ctx context.Context, videoURL string,
 	return "", fmt.Errorf("video transcription not yet implemented")
 }
 
-// makeCompletionRequest makes a chat completion request to OpenRouter
-func (c *OpenRouterClient) makeCompletionRequest(ctx context.Context, req ChatCompletionRequest) (string, error) {
+// makeCompletionRequest makes a chat completion request to OpenRouter using the SDK
+func (c *OpenRouterClient) makeCompletionRequest(ctx context.Context, req openai.ChatCompletionRequest) (string, error) {
 	ctx, span := openRouterTracer.Start(ctx, "makeCompletionRequest")
 	defer span.End()
 
 	span.SetAttributes(attribute.String("model", req.Model))
 
-	// Marshal request body
-	bodyBytes, err := json.Marshal(req)
+	// Make request using SDK
+	resp, err := c.client.CreateChatCompletion(ctx, req)
 	if err != nil {
 		span.RecordError(err)
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(bodyBytes))
-	if err != nil {
-		span.RecordError(err)
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("HTTP-Referer", "https://askyourfeed.com") // Optional: for OpenRouter analytics
-	httpReq.Header.Set("X-Title", "AskYourFeed")                  // Optional: for OpenRouter analytics
-
-	// Make request
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		span.RecordError(err)
-		return "", fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		span.RecordError(err)
-		return "", fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Check status code
-	if resp.StatusCode != http.StatusOK {
-		span.SetAttributes(attribute.Int("status_code", resp.StatusCode))
-		return "", fmt.Errorf("API error: %d, body: %s", resp.StatusCode, string(respBody))
-	}
-
-	// Parse response
-	var completionResp ChatCompletionResponse
-	if err := json.Unmarshal(respBody, &completionResp); err != nil {
-		span.RecordError(err)
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	// Check for API error
-	if completionResp.Error != nil {
-		return "", fmt.Errorf("OpenRouter API error: %s (type: %s, code: %s)",
-			completionResp.Error.Message,
-			completionResp.Error.Type,
-			completionResp.Error.Code)
+		return "", fmt.Errorf("failed to create chat completion: %w", err)
 	}
 
 	// Extract content from first choice
-	if len(completionResp.Choices) == 0 {
+	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("no choices in response")
 	}
 
-	content := completionResp.Choices[0].Message.Content
+	content := resp.Choices[0].Message.Content
 	span.SetAttributes(attribute.Int("content_length", len(content)))
 
 	return content, nil

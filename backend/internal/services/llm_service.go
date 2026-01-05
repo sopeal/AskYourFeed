@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	openai "github.com/sashabaranov/go-openai"
 	"github.com/sopeal/AskYourFeed/internal/db"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -21,13 +22,16 @@ var (
 
 // LLMService handles interactions with Language Model APIs
 type LLMService struct {
-	// Configuration for LLM API (e.g., API key, model, endpoint)
-	// In a real implementation, these would be injected
+	openRouterClient *OpenRouterClient
+	model            string
 }
 
 // NewLLMService creates a new LLMService instance
-func NewLLMService() *LLMService {
-	return &LLMService{}
+func NewLLMService(openRouterClient *OpenRouterClient) *LLMService {
+	return &LLMService{
+		openRouterClient: openRouterClient,
+		model:            "google/gemini-2.5-flash",
+	}
 }
 
 // GenerateAnswer generates an answer to a question based on provided posts
@@ -41,8 +45,8 @@ func (s *LLMService) GenerateAnswer(ctx context.Context, question string, posts 
 		attribute.Int("question_length", len(question)),
 	)
 
-	// Set timeout for LLM API call
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Set timeout for LLM API call - increased to 90 seconds for complex queries
+	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
 	// Format posts for LLM context
@@ -57,16 +61,12 @@ func (s *LLMService) GenerateAnswer(ctx context.Context, question string, posts 
 		attribute.Int("user_prompt_length", len(userPrompt)),
 	)
 
-	// TODO: In production, this would call actual LLM API (OpenAI, Anthropic, etc.)
 	// For now, we'll simulate the response
 	answer, sourcePostIDs, err := s.callLLMAPI(ctx, systemPrompt, userPrompt, posts)
 	if err != nil {
 		span.RecordError(err)
 		return "", nil, err
 	}
-
-	// Ensure minimum 3 sources if available
-	sourcePostIDs = s.ensureMinimumSources(sourcePostIDs, posts, 3)
 
 	span.SetAttributes(attribute.Int("source_count", len(sourcePostIDs)))
 
@@ -110,7 +110,8 @@ Important constraints:
 - Generate structured answers with bullet points when appropriate
 - Be concise and factual
 - If the posts don't contain relevant information, state this clearly
-- Always cite which posts you're referencing in your answer`
+- Always cite which posts you're referencing in your answer
+- Answer in the same language as the user question.`
 }
 
 // buildUserPrompt constructs the user prompt with question and posts
@@ -124,114 +125,32 @@ User's question: %s
 Please answer the question based on the posts above. Structure your answer with bullet points if there are multiple topics. Be specific and cite relevant posts.`, formattedPosts, question)
 }
 
-// callLLMAPI simulates calling the actual LLM API
-// In production, this would use OpenAI SDK, Anthropic SDK, or HTTP client
+// callLLMAPI calls OpenRouter API to generate an answer
 func (s *LLMService) callLLMAPI(ctx context.Context, systemPrompt, userPrompt string, posts []db.PostWithAuthor) (string, []int64, error) {
-	// TODO: Replace with actual LLM API call
-	// Example for OpenAI:
-	// client := openai.NewClient(apiKey)
-	// resp, err := client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-	//     Model: "gpt-4-turbo",
-	//     Messages: []openai.ChatCompletionMessage{
-	//         {Role: "system", Content: systemPrompt},
-	//         {Role: "user", Content: userPrompt},
-	//     },
-	// })
-
-	// For now, simulate a response
-	answer := `Na podstawie analizy postów z wybranego okresu, oto główne tematy dyskusji:
-
-• Rozwój sztucznej inteligencji i jej zastosowania w różnych dziedzinach
-• Nowe regulacje dotyczące prywatności danych
-• Innowacje technologiczne w sektorze finansowym
-• Dyskusje na temat zrównoważonego rozwoju i zmian klimatycznych
-
-Źródła tych informacji pochodzą z kilku najnowszych postów w Twoim feedzie.`
-
-	// Select diverse source posts (first, middle, last few posts as sources)
-	var sourceIDs []int64
-	if len(posts) > 0 {
-		// Select posts strategically to provide good coverage
-		indices := s.selectSourceIndices(len(posts))
-		for _, idx := range indices {
-			sourceIDs = append(sourceIDs, posts[idx].XPostID)
-		}
+	if s.openRouterClient == nil {
+		return "", nil, ErrLLMUnavailable
 	}
 
-	return answer, sourceIDs, nil
-}
-
-// selectSourceIndices selects indices of posts to use as sources
-// Aims for diverse temporal coverage across the post collection
-func (s *LLMService) selectSourceIndices(postCount int) []int {
-	if postCount == 0 {
-		return []int{}
+	// Prepare the request with system and user messages using SDK types
+	req := openai.ChatCompletionRequest{
+		Model: s.model,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemPrompt,
+			},
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: userPrompt,
+			},
+		},
 	}
 
-	if postCount <= 3 {
-		// Return all posts if we have 3 or fewer
-		indices := make([]int, postCount)
-		for i := 0; i < postCount; i++ {
-			indices[i] = i
-		}
-		return indices
+	// Make the API call
+	answer, err := s.openRouterClient.makeCompletionRequest(ctx, req)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to call OpenRouter API: %w", err)
 	}
 
-	// For more than 3 posts, select:
-	// - First post (earliest)
-	// - Middle post(s)
-	// - Last post (most recent)
-	indices := []int{0} // First post
-
-	// Middle post(s)
-	mid := postCount / 2
-	indices = append(indices, mid)
-
-	// If we have many posts, add another middle point
-	if postCount > 6 {
-		quarterMark := postCount / 4
-		threeQuarterMark := (postCount * 3) / 4
-		indices = append(indices, quarterMark, threeQuarterMark)
-	}
-
-	// Last post
-	indices = append(indices, postCount-1)
-
-	// Remove duplicates and sort
-	seen := make(map[int]bool)
-	uniqueIndices := []int{}
-	for _, idx := range indices {
-		if !seen[idx] {
-			seen[idx] = true
-			uniqueIndices = append(uniqueIndices, idx)
-		}
-	}
-
-	return uniqueIndices
-}
-
-// ensureMinimumSources ensures at least minCount sources are returned if available
-func (s *LLMService) ensureMinimumSources(sourceIDs []int64, posts []db.PostWithAuthor, minCount int) []int64 {
-	if len(sourceIDs) >= minCount || len(posts) <= minCount {
-		return sourceIDs
-	}
-
-	// If we don't have enough sources but have enough posts, add more
-	existingIDs := make(map[int64]bool)
-	for _, id := range sourceIDs {
-		existingIDs[id] = true
-	}
-
-	for _, post := range posts {
-		if !existingIDs[post.XPostID] {
-			sourceIDs = append(sourceIDs, post.XPostID)
-			existingIDs[post.XPostID] = true
-
-			if len(sourceIDs) >= minCount {
-				break
-			}
-		}
-	}
-
-	return sourceIDs
+	return answer, []int64{}, nil
 }

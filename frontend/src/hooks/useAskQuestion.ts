@@ -12,12 +12,15 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080
  * POST /api/v1/qa
  */
 const askQuestion = async (data: CreateQACommand): Promise<QADetailDTO> => {
+  const sessionToken = localStorage.getItem('session_token');
+  
   const response = await axios.post<QADetailDTO>(
     `${API_BASE_URL}/api/v1/qa`,
     data,
     {
       headers: {
         'Content-Type': 'application/json',
+        ...(sessionToken && { 'Authorization': `Bearer ${sessionToken}` }),
       },
       withCredentials: true, // Include session cookie
     }

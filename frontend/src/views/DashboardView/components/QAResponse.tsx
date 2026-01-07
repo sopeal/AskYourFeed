@@ -68,25 +68,6 @@ export const QAResponse = ({ data, isLoading }: QAResponseProps) => {
     );
   }
 
-  // Empty sources - no content in date range
-  if (data.sources.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="text-center">
-            <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-            <p className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-              Brak treści w wybranym zakresie
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Spróbuj rozszerzyć zakres dat lub zadaj inne pytanie
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   // Success state - show answer and sources
   const answerPoints = parseAnswerPoints(data.answer);
 

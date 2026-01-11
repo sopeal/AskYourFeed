@@ -1,18 +1,18 @@
 import { Navigate } from 'react-router-dom';
-import { ReactNode } from 'react';
+import { Layout } from './Layout';
 
 /**
  * Props for ProtectedRoute component
  */
 interface ProtectedRouteProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 /**
  * Check if user is authenticated
  * Checks for session token in localStorage
  */
-const isAuthenticated = (): boolean => {
+export const isAuthenticated = (): boolean => {
   const token = localStorage.getItem('session_token');
   const user = localStorage.getItem('user');
   
@@ -45,11 +45,12 @@ const isAuthenticated = (): boolean => {
 /**
  * ProtectedRoute component
  * Redirects to login if user is not authenticated
+ * Wraps authenticated content with Layout (includes Header)
  */
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
 
-  return <>{children}</>;
+  return <Layout>{children}</Layout>;
 };

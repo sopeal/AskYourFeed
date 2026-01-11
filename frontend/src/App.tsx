@@ -4,7 +4,7 @@ import { RegisterView } from './views/RegisterView';
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
 import { HistoryView } from './views/HistoryView';
-import { ProtectedRoute } from './components/shared/ProtectedRoute';
+import { ProtectedRoute, isAuthenticated } from './components/shared/ProtectedRoute';
 import './App.css';
 
 // Create a client for React Query
@@ -18,6 +18,17 @@ const queryClient = new QueryClient({
 });
 
 /**
+ * AuthRoute component
+ * Redirects to dashboard if user is already authenticated
+ */
+const AuthRoute = ({ children }: { children: React.ReactNode }) => {
+  if (isAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
+};
+
+/**
  * Main App component with routing and providers
  */
 function App() {
@@ -25,9 +36,23 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          {/* Authentication routes */}
-          <Route path="/register" element={<RegisterView />} />
-          <Route path="/login" element={<LoginView />} />
+          {/* Authentication routes - redirect to dashboard if already logged in */}
+          <Route 
+            path="/register" 
+            element={
+              <AuthRoute>
+                <RegisterView />
+              </AuthRoute>
+            } 
+          />
+          <Route 
+            path="/login" 
+            element={
+              <AuthRoute>
+                <LoginView />
+              </AuthRoute>
+            } 
+          />
           
           {/* Protected dashboard route */}
           <Route 

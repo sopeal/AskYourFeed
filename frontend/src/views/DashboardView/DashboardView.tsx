@@ -3,7 +3,6 @@ import { AxiosError } from 'axios';
 import { useAskQuestion } from '../../hooks/useAskQuestion';
 import { useToast } from '../../hooks/useToast';
 import { Toast } from '../../components/ui/toast';
-import { SyncStatusIndicator } from '../../components/shared/SyncStatusIndicator';
 import { QAForm } from './components/QAForm';
 import { QAResponse } from './components/QAResponse';
 import type { QADetailDTO, CreateQACommand, ErrorResponseDTO } from '../../types/qa.types';
@@ -14,7 +13,7 @@ import type { QADetailDTO, CreateQACommand, ErrorResponseDTO } from '../../types
  */
 export const DashboardView = () => {
   const [lastResponse, setLastResponse] = useState<QADetailDTO | null>(null);
-  const { mutate: askQuestion, isPending, data, error } = useAskQuestion();
+  const { mutate: askQuestion, isPending, data } = useAskQuestion();
   const { toasts, showError, dismissToast } = useToast();
 
   /**
@@ -68,18 +67,6 @@ export const DashboardView = () => {
       </div>
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-950 border-b border-gray-200 dark:border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              AskYourFeed
-            </h1>
-            <SyncStatusIndicator />
-          </div>
-        </div>
-      </header>
-
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid gap-8 lg:grid-cols-3">

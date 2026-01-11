@@ -11,11 +11,16 @@ import type {
  */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
+const getAuthHeaders = () => {
+  const sessionToken = localStorage.getItem('session_token');
+  return sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
+};
+
 /**
  * Fetch paginated Q&A history list
  * GET /api/v1/qa
  */
-const fetchQAHistory = async ({ pageParam }: { pageParam?: string }): Promise<QAListResponseDTO> => {
+const fetchQAHistory = async (pageParam?: string): Promise<QAListResponseDTO> => {
   const params = new URLSearchParams();
   params.append('limit', '20');
   if (pageParam) {
@@ -26,6 +31,7 @@ const fetchQAHistory = async ({ pageParam }: { pageParam?: string }): Promise<QA
     `${API_BASE_URL}/api/v1/qa?${params.toString()}`,
     {
       withCredentials: true,
+      headers: getAuthHeaders(),
     }
   );
   return response.data;
@@ -40,6 +46,7 @@ const fetchQADetail = async (id: string): Promise<QADetailDTO> => {
     `${API_BASE_URL}/api/v1/qa/${id}`,
     {
       withCredentials: true,
+      headers: getAuthHeaders(),
     }
   );
   return response.data;
@@ -54,6 +61,7 @@ const deleteQAEntry = async (id: string): Promise<{ message: string }> => {
     `${API_BASE_URL}/api/v1/qa/${id}`,
     {
       withCredentials: true,
+      headers: getAuthHeaders(),
     }
   );
   return response.data;
@@ -68,6 +76,7 @@ const deleteAllQAHistory = async (): Promise<{ message: string; deleted_count: n
     `${API_BASE_URL}/api/v1/qa`,
     {
       withCredentials: true,
+      headers: getAuthHeaders(),
     }
   );
   return response.data;
@@ -96,7 +105,7 @@ export const useHistory = () => {
   // Infinite query for paginated history list
   const historyQuery = useInfiniteQuery<QAListResponseDTO, AxiosError<ErrorResponseDTO>>({
     queryKey: ['qa-history'],
-    queryFn: fetchQAHistory,
+    queryFn: ({ pageParam }) => fetchQAHistory(pageParam as string | undefined),
     getNextPageParam: (lastPage) => {
       return lastPage.has_more ? lastPage.next_cursor : undefined;
     },

@@ -93,17 +93,18 @@ CREATE INDEX IF NOT EXISTS idx_ingest_runs_user_started ON ingest_runs (user_id,
 -- Create user-scoped table: posts
 CREATE TABLE IF NOT EXISTS posts (
     user_id uuid NOT NULL,
-    x_post_id bigint NOT NULL,
+    x_post_id bigint NOT NULL CHECK (x_post_id > 0),
     author_id bigint NOT NULL,
     published_at timestamptz NOT NULL,
-    url text NOT NULL,
+    url text NOT NULL CHECK (url ~ '^https?://(x|twitter)\\.com/.+/status/\\d+'),
     text text NOT NULL,
     conversation_id bigint,
     ingested_at timestamptz NOT NULL,
     first_visible_at timestamptz NOT NULL,
     edited_seen boolean NOT NULL DEFAULT false,
     ts tsvector GENERATED ALWAYS AS (to_tsvector('english', text)) STORED,
-    PRIMARY KEY (user_id, x_post_id)
+    PRIMARY KEY (user_id, x_post_id),
+    FOREIGN KEY (author_id) REFERENCES authors(x_author_id) ON DELETE CASCADE
 );
 
 -- Create index for posts on (user_id, published_at desc)

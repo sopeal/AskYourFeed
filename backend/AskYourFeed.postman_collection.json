@@ -1,0 +1,390 @@
+{
+	"info": {
+		"_postman_id": "askyourfeed-api-v1",
+		"name": "Ask Your Feed API v1",
+		"description": "REST API for Ask Your Feed - MVP\n\nA service that ingests X (Twitter) feed posts and provides Q&A functionality using LLM.\n\n**Base URL:** `http://localhost:8080/api/v1`\n\n**Authentication:** Bearer token in Authorization header or session_token cookie",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{session_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "session_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "qa_id",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication & Session",
+			"item": [
+				{
+					"name": "Register",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.collectionVariables.set('session_token', jsonData.session_token);",
+									"    pm.collectionVariables.set('user_id', jsonData.user_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"SecurePassword123!\",\n  \"password_confirmation\": \"SecurePassword123!\",\n  \"x_username\": \"elonmusk\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register"]
+						},
+						"description": "Register a new user account with email, password, and X username. Validates X username via twitterapi.io before completing registration.\n\n**Success:** 201 Created\n\n**Error Codes:**\n- 400 Bad Request - Invalid input data\n- 409 Conflict - Email already registered\n- 422 Unprocessable Entity - X username does not exist\n- 500 Internal Server Error\n- 503 Service Unavailable - twitterapi.io unavailable"
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.collectionVariables.set('session_token', jsonData.session_token);",
+									"    pm.collectionVariables.set('user_id', jsonData.user_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"SecurePassword123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						},
+						"description": "Authenticate user with email and password.\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 400 Bad Request - Invalid input data\n- 401 Unauthorized - Invalid email or password\n- 500 Internal Server Error"
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "logout"]
+						},
+						"description": "Terminate user session and invalidate session token.\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 401 Unauthorized - Invalid or expired session"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current Session",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/session/current",
+							"host": ["{{base_url}}"],
+							"path": ["session", "current"]
+						},
+						"description": "Get current user session information and metadata.\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 401 Unauthorized - Invalid or expired session"
+					},
+					"response": []
+				}
+			],
+			"description": "User authentication and session management endpoints"
+		},
+		{
+			"name": "Feed Ingestion",
+			"item": [
+				{
+					"name": "Trigger Ingestion",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 202) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.environment.set('ingest_run_id', jsonData.ingest_run_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"backfill_hours\": 24\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/ingest/trigger",
+							"host": ["{{base_url}}"],
+							"path": ["ingest", "trigger"]
+						},
+						"description": "Manually trigger feed ingestion. Initiates an immediate feed ingestion run for initial backfill (24h) or manual refresh.\n\n**Success:** 202 Accepted\n\n**Error Codes:**\n- 401 Unauthorized\n- 403 Forbidden - Budget exhausted\n- 409 Conflict - Ingest already in progress\n- 429 Too Many Requests - Rate limit exceeded\n- 500 Internal Server Error"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Ingestion Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/ingest/status?limit=10",
+							"host": ["{{base_url}}"],
+							"path": ["ingest", "status"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10",
+									"description": "Number of recent runs to return (default: 10, max: 50)"
+								}
+							]
+						},
+						"description": "Get ingestion status and history including current and recent ingestion runs.\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 401 Unauthorized\n- 500 Internal Server Error"
+					},
+					"response": []
+				}
+			],
+			"description": "Feed ingestion management endpoints"
+		},
+		{
+			"name": "Question & Answer",
+			"item": [
+				{
+					"name": "Create Q&A",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const jsonData = pm.response.json();",
+									"    pm.collectionVariables.set('qa_id', jsonData.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"question\": \"Jakie były główne tematy dyskusji w tym tygodniu?\",\n  \"date_from\": \"2025-10-24T00:00:00Z\",\n  \"date_to\": \"2025-10-31T23:59:59Z\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/qa",
+							"host": ["{{base_url}}"],
+							"path": ["qa"]
+						},
+						"description": "Submit a question to LLM and get an answer based on posts from the specified date range.\n\n**Success:** 201 Created\n\n**Error Codes:**\n- 400 Bad Request - Invalid parameters\n- 401 Unauthorized\n- 403 Forbidden - Budget exhausted\n- 422 Unprocessable Entity - date_from > date_to\n- 429 Too Many Requests\n- 500 Internal Server Error\n- 503 Service Unavailable - LLM service unavailable"
+					},
+					"response": []
+				},
+				{
+					"name": "List Q&A History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/qa?limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["qa"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Number of items per page (default: 20, max: 100)"
+								},
+								{
+									"key": "cursor",
+									"value": "",
+									"description": "Pagination cursor (ULID of last item)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get paginated list of user's Q&A interactions, ordered by creation time (newest first).\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 401 Unauthorized\n- 500 Internal Server Error"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Q&A by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/qa/{{qa_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["qa", "{{qa_id}}"]
+						},
+						"description": "Get full details of a specific Q&A interaction including complete answer and all sources.\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 401 Unauthorized\n- 404 Not Found - Q&A not found or doesn't belong to user\n- 500 Internal Server Error"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Q&A by ID",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/qa/{{qa_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["qa", "{{qa_id}}"]
+						},
+						"description": "Permanently remove a Q&A message and its associated sources from history.\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 401 Unauthorized\n- 404 Not Found - Q&A not found or doesn't belong to user\n- 500 Internal Server Error"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete All Q&A History",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/qa",
+							"host": ["{{base_url}}"],
+							"path": ["qa"]
+						},
+						"description": "Permanently remove all Q&A messages and sources for the authenticated user.\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 401 Unauthorized\n- 500 Internal Server Error"
+					},
+					"response": []
+				}
+			],
+			"description": "Question and Answer interaction endpoints"
+		},
+		{
+			"name": "Following",
+			"item": [
+				{
+					"name": "Get Following List",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/following?limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["following"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50",
+									"description": "Number of items per page (default: 50, max: 200)"
+								},
+								{
+									"key": "cursor",
+									"value": "",
+									"description": "Pagination cursor (x_author_id of last item)",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get paginated list of X authors that the user is following and whose posts are being ingested.\n\n**Success:** 200 OK\n\n**Error Codes:**\n- 401 Unauthorized\n- 500 Internal Server Error"
+					},
+					"response": []
+				}
+			],
+			"description": "Following management endpoints"
+		},
+		{
+			"name": "System",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/system/health",
+							"host": ["{{base_url}}"],
+							"path": ["system", "health"]
+						},
+						"description": "Get system health status of the application and its dependencies. Does not require authentication.\n\n**Success:** 200 OK (healthy), 503 Service Unavailable (degraded/unhealthy)"
+					},
+					"response": []
+				}
+			],
+			"description": "System health and monitoring endpoints"
+		}
+	]
+}

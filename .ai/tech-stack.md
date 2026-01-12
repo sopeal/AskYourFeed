@@ -1,3 +1,3 @@
-- Frontend: TypeScript, React  
+- Frontend: TypeScript, React, Tailwind, Shadcn/ui
 - Backend: Golang, Gin  
 - Baza danych: Postgres

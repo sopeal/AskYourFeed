@@ -165,7 +165,7 @@ func (s *QAService) CreateQA(
 }
 
 // buildSourceDTOs creates QASourceDTO objects from posts and selected source IDs
-func (s *QAService) buildSourceDTOs(posts []repositories.PostWithAuthor, sourcePostIDs []int64) []dto.QASourceDTO {
+func (s *QAService) buildSourceDTOs(posts []db.PostWithAuthor, sourcePostIDs []int64) []dto.QASourceDTO {
 	if len(sourcePostIDs) == 0 {
 		return []dto.QASourceDTO{}
 	}

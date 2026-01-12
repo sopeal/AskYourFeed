@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,18 +15,30 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/sopeal/AskYourFeed/internal/handlers"
+	"github.com/sopeal/AskYourFeed/internal/middleware"
 	"github.com/sopeal/AskYourFeed/internal/repositories"
 	"github.com/sopeal/AskYourFeed/internal/services"
-	"golang.org/x/oauth2"
+	"github.com/sopeal/AskYourFeed/pkg/logger"
 )
 
 func main() {
+	// Initialize logger
+	logLevel := getLogLevel()
+	logger.Init(logLevel)
+
 	// Load configuration from environment variables
 	config := loadConfig()
+
+	logger.Info("starting AskYourFeed backend",
+		"version", "1.0.0",
+		"port", config.Port,
+		"log_level", logLevel.String(),
+		"database_url", maskDatabaseURL(config.DatabaseURL))
 
 	// Initialize database connection
 	db, err := initDatabase(config.DatabaseURL)
 	if err != nil {
+		logger.Error("failed to initialize database", err)
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer db.Close()
@@ -35,35 +48,57 @@ func main() {
 	qaRepo := repositories.NewQARepository(db)
 	ingestRepo := repositories.NewIngestRepository(db)
 	followingRepo := repositories.NewFollowingRepository(db)
-	authRepo := repositories.NewAuthRepository(db)
+	authorRepo := repositories.NewAuthorRepository(db)
+	userRepo := repositories.NewUserRepository(db)
+	sessionRepo := repositories.NewSessionRepository(db)
 
-	// Initialize OAuth2 config
-	oauthConfig := &oauth2.Config{
-		ClientID:     config.XClientID,
-		ClientSecret: config.XClientSecret,
-		RedirectURL:  config.BaseURL + "/api/v1/auth/callback",
-		Scopes:       []string{"tweet.read", "users.read", "follows.read", "offline.access"},
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://twitter.com/i/oauth2/authorize",
-			TokenURL: "https://api.twitter.com/2/oauth2/token",
-		},
+	// Initialize Twitter API client
+	twitterClient := services.NewTwitterClient(config.TwitterAPIKey, nil)
+
+	// Initialize OpenRouter client for ingestion (optional - only if API key is provided)
+	var openRouterClient *services.OpenRouterClient
+	if config.OpenRouterAPIKey != "" {
+		openRouterClient = services.NewOpenRouterClient(config.OpenRouterAPIKey, nil)
+		logger.Info("OpenRouter client initialized for media processing")
+	} else {
+		logger.Warn("OpenRouter API key not provided - media processing will be skipped")
+	}
+
+	// Initialize OpenRouter client for Q&A (separate API key)
+	var openRouterQAClient *services.OpenRouterClient
+	if config.OpenRouterQAAPIKey != "" {
+		openRouterQAClient = services.NewOpenRouterClient(config.OpenRouterQAAPIKey, nil)
+		logger.Info("OpenRouter Q&A client initialized")
+	} else {
+		logger.Warn("OpenRouter Q&A API key not provided - Q&A functionality will be unavailable")
 	}
 
 	// Initialize services
-	llmService := services.NewLLMService()
+	llmService := services.NewLLMService(openRouterQAClient)
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
-	ingestService := services.NewIngestService(ingestRepo)
+	ingestStatusService := services.NewIngestStatusService(ingestRepo)
 	followingService := services.NewFollowingService(followingRepo)
-	authService := services.NewAuthService(authRepo, oauthConfig, config.EncryptionKey, config.BaseURL)
+	authService := services.NewAuthService(userRepo, sessionRepo, *twitterClient)
+
+	// Initialize ingestion service
+	ingestService := services.NewIngestService(
+		twitterClient,
+		openRouterClient,
+		ingestRepo,
+		followingRepo,
+		postRepo,
+		authorRepo,
+		userRepo,
+	)
 
 	// Initialize handlers
 	qaHandler := handlers.NewQAHandler(qaService)
-	ingestHandler := handlers.NewIngestHandler(ingestService)
+	ingestHandler := handlers.NewIngestHandler(ingestStatusService, ingestService)
 	followingHandler := handlers.NewFollowingHandler(followingService)
 	authHandler := handlers.NewAuthHandler(authService)
 
 	// Set up HTTP router
-	router := setupRouter(qaHandler, ingestHandler, followingHandler, authHandler, authService)
+	router := setupRouter(db, authService, authHandler, qaHandler, ingestHandler, followingHandler)
 
 	// Start HTTP server with graceful shutdown
 	srv := &http.Server{
@@ -73,8 +108,9 @@ func main() {
 
 	// Start server in a goroutine
 	go func() {
-		log.Printf("Starting server on port %s", config.Port)
+		logger.Info("HTTP server listening", "port", config.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server failed to start", err)
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
@@ -84,38 +120,37 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	logger.Info("shutting down server gracefully...")
 
 	// Graceful shutdown with 5 second timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("server forced to shutdown", err)
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	log.Println("Server exited")
+	logger.Info("server exited successfully")
 }
 
 // Config holds application configuration
 type Config struct {
-	Port          string
-	DatabaseURL   string
-	XClientID     string
-	XClientSecret string
-	EncryptionKey string
-	BaseURL       string
+	Port               string
+	DatabaseURL        string
+	TwitterAPIKey      string
+	OpenRouterAPIKey   string
+	OpenRouterQAAPIKey string
 }
 
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
 	return Config{
-		Port:          getEnv("PORT", "8080"),
-		DatabaseURL:   getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
-		XClientID:     getEnv("X_CLIENT_ID", ""),
-		XClientSecret: getEnv("X_CLIENT_SECRET", ""),
-		EncryptionKey: getEnv("ENCRYPTION_KEY", "default-encryption-key-change-in-production"),
-		BaseURL:       getEnv("BASE_URL", "http://localhost:8080"),
+		Port:               getEnv("PORT", "8080"),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/askyourfeed?sslmode=disable"),
+		TwitterAPIKey:      getEnv("TWITTER_API_KEY", ""),
+		OpenRouterAPIKey:   getEnv("OPENROUTER_API_KEY", ""),
+		OpenRouterQAAPIKey: getEnv("OPENROUTER_QA_API_KEY", ""),
 	}
 }
 
@@ -144,12 +179,47 @@ func initDatabase(databaseURL string) (*sqlx.DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	log.Println("Database connection established")
+	logger.Info("database connection established",
+		"max_open_conns", 25,
+		"max_idle_conns", 5,
+		"conn_max_lifetime", "5m")
 	return db, nil
 }
 
+// getLogLevel returns the log level from environment variable
+func getLogLevel() slog.Level {
+	switch os.Getenv("LOG_LEVEL") {
+	case "DEBUG":
+		return slog.LevelDebug
+	case "INFO":
+		return slog.LevelInfo
+	case "WARN":
+		return slog.LevelWarn
+	case "ERROR":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
+}
+
+// maskDatabaseURL masks sensitive parts of the database URL for logging
+func maskDatabaseURL(url string) string {
+	// Simple masking - in production, use a proper URL parser
+	if len(url) > 20 {
+		return url[:10] + "***" + url[len(url)-10:]
+	}
+	return "***"
+}
+
 // setupRouter configures the Gin router with routes and middleware
-func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHandler, followingHandler *handlers.FollowingHandler, authHandler *handlers.AuthHandler, authService *services.AuthService) *gin.Engine {
+func setupRouter(
+	db *sqlx.DB,
+	authService services.AuthService,
+	authHandler *handlers.AuthHandler,
+	qaHandler *handlers.QAHandler,
+	ingestHandler *handlers.IngestHandler,
+	followingHandler *handlers.FollowingHandler,
+) *gin.Engine {
 	// Set Gin to release mode for production (can be overridden with GIN_MODE env var)
 	if os.Getenv("GIN_MODE") == "" {
 		gin.SetMode(gin.ReleaseMode)
@@ -168,24 +238,24 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
-		// Auth endpoints (public)
+		// Authentication endpoints (public - no auth required)
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/login", authHandler.InitiateLogin)    // Initiate OAuth login
-			auth.GET("/callback", authHandler.HandleCallback) // OAuth callback
-			auth.POST("/logout", authHandler.Logout)          // Logout
+			auth.POST("/register", authHandler.Register)
+			auth.POST("/login", authHandler.Login)
+			auth.POST("/logout", authHandler.Logout) // Requires auth but handled in handler
 		}
 
-		// Session endpoint (protected)
+		// Session endpoints (protected by auth middleware)
 		session := v1.Group("/session")
-		session.Use(authMiddleware(authService)) // Apply auth middleware
+		session.Use(middleware.AuthMiddleware(authService, db))
 		{
-			session.GET("/current", authHandler.GetCurrentSession) // Get current session
+			session.GET("/current", authHandler.GetCurrentSession)
 		}
 
 		// Q&A endpoints (protected by auth middleware)
 		qa := v1.Group("/qa")
-		qa.Use(authMiddleware(authService)) // Apply auth middleware to Q&A routes
+		qa.Use(middleware.AuthMiddleware(authService, db))
 		{
 			qa.POST("", qaHandler.CreateQA)       // Create new Q&A
 			qa.GET("", qaHandler.ListQA)          // List Q&A history
@@ -196,14 +266,15 @@ func setupRouter(qaHandler *handlers.QAHandler, ingestHandler *handlers.IngestHa
 
 		// Ingest endpoints (protected by auth middleware)
 		ingest := v1.Group("/ingest")
-		ingest.Use(authMiddleware(authService)) // Apply auth middleware to ingest routes
+		ingest.Use(middleware.AuthMiddleware(authService, db))
 		{
 			ingest.GET("/status", ingestHandler.GetIngestStatus)
+			ingest.POST("/trigger", ingestHandler.TriggerIngest)
 		}
 
 		// Following endpoints (protected by auth middleware)
 		following := v1.Group("/following")
-		following.Use(authMiddleware(authService)) // Apply auth middleware to following routes
+		following.Use(middleware.AuthMiddleware(authService, db))
 		{
 			following.GET("", followingHandler.GetFollowing) // Get list of followed authors
 		}
@@ -221,63 +292,14 @@ func healthCheckHandler(c *gin.Context) {
 	})
 }
 
-// authMiddleware validates session tokens and extracts user_id
-func authMiddleware(authService *services.AuthService) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		ctx := c.Request.Context()
-
-		// Extract session token from Authorization header or cookie
-		var sessionToken string
-
-		// Try Authorization header first
-		authHeader := c.GetHeader("Authorization")
-		if authHeader != "" && len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			sessionToken = authHeader[7:]
-		}
-
-		// Try session_token cookie if no header
-		if sessionToken == "" {
-			if cookie, err := c.Cookie("session_token"); err == nil && cookie != "" {
-				sessionToken = cookie
-			}
-		}
-
-		if sessionToken == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"code":    "UNAUTHORIZED",
-					"message": "Brak tokena sesji",
-				},
-			})
-			c.Abort()
-			return
-		}
-
-		// Validate session token
-		userID, err := authService.ValidateSession(ctx, sessionToken)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"code":    "INVALID_SESSION",
-					"message": "Nieprawidłowa lub wygasła sesja",
-				},
-			})
-			c.Abort()
-			return
-		}
-
-		// Set user_id in context for handlers to use
-		c.Set("user_id", userID)
-		c.Next()
-	}
-}
-
 // corsMiddleware adds CORS headers to responses
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		// Allow specific origin for development (Vite dev server)
+		// In production, this should be configurable
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5174")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 
 		if c.Request.Method == "OPTIONS" {

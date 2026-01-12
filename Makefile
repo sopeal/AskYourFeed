@@ -9,8 +9,8 @@ DB_PORT := 5432
 DB_CONTAINER := askyourfeed_postgres_dev
 POSTGRES_VERSION := 16-alpine
 
-# SQL migration file
-MIGRATION_FILE := db/20251023214826_create_secure_schema.sql
+# SQL migration directory
+MIGRATION_DIR := db
 
 # Colors for output
 GREEN := \033[0;32m
@@ -41,11 +41,14 @@ db-start: ## Start PostgreSQL container
 	@docker exec $(DB_CONTAINER) pg_isready -U $(DB_USER) || sleep 2
 	@echo "$(GREEN)PostgreSQL is ready!$(NC)"
 
-db-init: db-start ## Initialize database with schema migrations
+db-init: db-start ## Initialize database with all schema migrations
 	@echo "$(GREEN)Initializing database schema...$(NC)"
 	@sleep 2
-	@docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) < $(MIGRATION_FILE)
-	@docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) < db/20251111235200_add_auth_tables.sql
+	@echo "$(GREEN)Applying migrations from $(MIGRATION_DIR)...$(NC)"
+	@for file in $(sort $(wildcard $(MIGRATION_DIR)/*.sql)); do \
+		echo "$(YELLOW)Applying migration: $$file$(NC)"; \
+		docker exec -i $(DB_CONTAINER) psql -U $(DB_USER) -d $(DB_NAME) < $$file || exit 1; \
+	done
 	@echo "$(GREEN)Database schema initialized successfully!$(NC)"
 
 db-stop: ## Stop PostgreSQL container

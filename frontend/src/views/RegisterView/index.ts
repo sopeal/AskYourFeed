@@ -1,0 +1,1 @@
+export { RegisterView } from './RegisterView';

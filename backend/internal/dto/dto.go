@@ -7,23 +7,43 @@ import (
 )
 
 // =============================================================================
-// Auth DTOs
+// Authentication DTOs
 // =============================================================================
 
-// AuthInitiateResponseDTO represents response from login initiation
-// Contains OAuth authorization URL and state token
-type AuthInitiateResponseDTO struct {
-	AuthURL string `json:"auth_url"` // X OAuth authorization URL
-	State   string `json:"state"`    // CSRF protection token
+// RegisterCommand represents request to register a new user
+// Command model for POST /api/v1/auth/register
+type RegisterCommand struct {
+	Email                string `json:"email" validate:"required,email"`
+	Password             string `json:"password" validate:"required,min=8"`
+	PasswordConfirmation string `json:"password_confirmation" validate:"required"`
+	XUsername            string `json:"x_username" validate:"required"`
 }
 
-// AuthCallbackResponseDTO represents response from OAuth callback
-// Contains session token and user information
-type AuthCallbackResponseDTO struct {
-	SessionToken string    `json:"session_token"` // Session token for API authentication
-	UserID       uuid.UUID `json:"user_id"`       // Internal user ID
-	XHandle      string    `json:"x_handle"`      // X (Twitter) username
-	RedirectURL  string    `json:"redirect_url"`  // Frontend redirect URL
+// RegisterResponseDTO represents response after successful registration
+type RegisterResponseDTO struct {
+	UserID       uuid.UUID `json:"user_id"`
+	Email        string    `json:"email"`
+	XUsername    string    `json:"x_username"`
+	XDisplayName string    `json:"x_display_name"`
+	CreatedAt    time.Time `json:"created_at"`
+	SessionToken string    `json:"session_token"`
+}
+
+// LoginCommand represents request to login
+// Command model for POST /api/v1/auth/login
+type LoginCommand struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
+}
+
+// LoginResponseDTO represents response after successful login
+type LoginResponseDTO struct {
+	UserID           uuid.UUID `json:"user_id"`
+	Email            string    `json:"email"`
+	XUsername        string    `json:"x_username"`
+	XDisplayName     string    `json:"x_display_name"`
+	SessionToken     string    `json:"session_token"`
+	SessionExpiresAt time.Time `json:"session_expires_at"`
 }
 
 // =============================================================================
@@ -31,13 +51,16 @@ type AuthCallbackResponseDTO struct {
 // =============================================================================
 
 // SessionDTO represents current user session information
-// Maps to: OAuth tokens (external storage) + user metadata
+// Maps to: sessions table + users table
 type SessionDTO struct {
 	UserID           uuid.UUID `json:"user_id"`
-	XHandle          string    `json:"x_handle"`
+	Email            string    `json:"email"`
+	XUsername        string    `json:"x_username"`
 	XDisplayName     string    `json:"x_display_name"`
 	AuthenticatedAt  time.Time `json:"authenticated_at"`
 	SessionExpiresAt time.Time `json:"session_expires_at"`
+	FollowingCount   int       `json:"following_count"`
+	FollowingLimit   int       `json:"following_limit"`
 }
 
 // =============================================================================
@@ -61,22 +84,22 @@ type TriggerIngestResponseDTO struct {
 // IngestRunDTO represents a single ingestion run
 // Maps to: ingest_runs table
 type IngestRunDTO struct {
-	ID            string     `json:"id"`                       // From ingest_runs.id (ULID)
-	Status        string     `json:"status"`                   // From ingest_runs.status
-	StartedAt     time.Time  `json:"started_at"`               // From ingest_runs.started_at
-	CompletedAt   *time.Time `json:"completed_at,omitempty"`   // From ingest_runs.completed_at (nullable)
-	FetchedCount  int        `json:"fetched_count"`            // From ingest_runs.fetched_count
-	Retried       int        `json:"retried,omitempty"`        // From ingest_runs.retried
+	ID            string     `json:"id"`                        // From ingest_runs.id (ULID)
+	Status        string     `json:"status"`                    // From ingest_runs.status
+	StartedAt     time.Time  `json:"started_at"`                // From ingest_runs.started_at
+	CompletedAt   *time.Time `json:"completed_at,omitempty"`    // From ingest_runs.completed_at (nullable)
+	FetchedCount  int        `json:"fetched_count"`             // From ingest_runs.fetched_count
+	Retried       int        `json:"retried,omitempty"`         // From ingest_runs.retried
 	RateLimitHits int        `json:"rate_limit_hits,omitempty"` // From ingest_runs.rate_limit_hits
-	Error         string     `json:"error,omitempty"`          // From ingest_runs.err_text (nullable)
+	Error         string     `json:"error,omitempty"`           // From ingest_runs.err_text (nullable)
 }
 
 // IngestStatusDTO represents current and recent ingestion status
 // Combines data from multiple ingest_runs table rows
 type IngestStatusDTO struct {
-	LastSyncAt  *time.Time      `json:"last_sync_at,omitempty"` // Most recent completed_at from ingest_runs
-	CurrentRun  *IngestRunDTO   `json:"current_run,omitempty"`  // Currently running ingest (status != 'ok'|'rate_limited'|'error' or completed_at IS NULL)
-	RecentRuns  []IngestRunDTO  `json:"recent_runs"`            // Recent completed runs from ingest_runs
+	LastSyncAt *time.Time     `json:"last_sync_at,omitempty"` // Most recent completed_at from ingest_runs
+	CurrentRun *IngestRunDTO  `json:"current_run,omitempty"`  // Currently running ingest (status != 'ok'|'rate_limited'|'error' or completed_at IS NULL)
+	RecentRuns []IngestRunDTO `json:"recent_runs"`            // Recent completed runs from ingest_runs
 }
 
 // =============================================================================
@@ -94,25 +117,25 @@ type CreateQACommand struct {
 // QASourceDTO represents a source post for Q&A answer
 // Maps to: posts table joined with authors table via qa_sources junction table
 type QASourceDTO struct {
-	XPostID           int64     `json:"x_post_id"`            // From posts.x_post_id
-	AuthorHandle      string    `json:"author_handle"`        // From authors.handle
-	AuthorDisplayName string    `json:"author_display_name"`  // From authors.display_name
-	PublishedAt       time.Time `json:"published_at"`         // From posts.published_at
-	URL               string    `json:"url"`                  // From posts.url
+	XPostID           int64     `json:"x_post_id"`              // From posts.x_post_id
+	AuthorHandle      string    `json:"author_handle"`          // From authors.handle
+	AuthorDisplayName string    `json:"author_display_name"`    // From authors.display_name
+	PublishedAt       time.Time `json:"published_at"`           // From posts.published_at
+	URL               string    `json:"url"`                    // From posts.url
 	TextPreview       string    `json:"text_preview,omitempty"` // Truncated posts.text (for list view)
-	Text              string    `json:"text,omitempty"`       // Full posts.text (for detail view)
+	Text              string    `json:"text,omitempty"`         // Full posts.text (for detail view)
 }
 
 // QADetailDTO represents full Q&A interaction details
 // Maps to: qa_messages table with sources from qa_sources -> posts -> authors
 type QADetailDTO struct {
-	ID        string        `json:"id"`        // From qa_messages.id (ULID)
-	Question  string        `json:"question"`  // From qa_messages.question
-	Answer    string        `json:"answer"`    // From qa_messages.answer
-	DateFrom  time.Time     `json:"date_from"` // From qa_messages.date_from
-	DateTo    time.Time     `json:"date_to"`   // From qa_messages.date_to
+	ID        string        `json:"id"`         // From qa_messages.id (ULID)
+	Question  string        `json:"question"`   // From qa_messages.question
+	Answer    string        `json:"answer"`     // From qa_messages.answer
+	DateFrom  time.Time     `json:"date_from"`  // From qa_messages.date_from
+	DateTo    time.Time     `json:"date_to"`    // From qa_messages.date_to
 	CreatedAt time.Time     `json:"created_at"` // From qa_messages.created_at
-	Sources   []QASourceDTO `json:"sources"`   // From qa_sources joined with posts and authors
+	Sources   []QASourceDTO `json:"sources"`    // From qa_sources joined with posts and authors
 }
 
 // QAListItemDTO represents Q&A item in paginated list
@@ -141,19 +164,16 @@ type QAListResponseDTO struct {
 // FollowingItemDTO represents an author the user follows
 // Maps to: user_following table joined with authors table
 type FollowingItemDTO struct {
-	XAuthorID      int64      `json:"x_author_id"`      // From authors.x_author_id
-	Handle         string     `json:"handle"`           // From authors.handle
-	DisplayName    string     `json:"display_name"`     // From authors.display_name
-	LastSeenAt     *time.Time `json:"last_seen_at,omitempty"` // From authors.last_seen_at (nullable)
-	LastCheckedAt  *time.Time `json:"last_checked_at,omitempty"` // From user_following.last_checked_at (nullable)
+	XAuthorID     int64      `json:"x_author_id"`               // From authors.x_author_id
+	Handle        string     `json:"handle"`                    // From authors.handle
+	DisplayName   string     `json:"display_name"`              // From authors.display_name
+	LastSeenAt    *time.Time `json:"last_seen_at,omitempty"`    // From authors.last_seen_at (nullable)
+	LastCheckedAt *time.Time `json:"last_checked_at,omitempty"` // From user_following.last_checked_at (nullable)
 }
 
 // FollowingListResponseDTO represents paginated following list response
 type FollowingListResponseDTO struct {
-	Items      []FollowingItemDTO `json:"items"`
-	NextCursor int64              `json:"next_cursor,omitempty"` // x_author_id of last item for pagination
-	HasMore    bool               `json:"has_more"`
-	TotalCount int                `json:"total_count"` // Total count of followed authors
+	Items []FollowingItemDTO `json:"items"`
 }
 
 // =============================================================================
@@ -162,18 +182,18 @@ type FollowingListResponseDTO struct {
 
 // ComponentHealthDTO represents health status of a system component
 type ComponentHealthDTO struct {
-	Status            string     `json:"status"`                        // "healthy", "unhealthy", "rate_limited"
-	ResponseTimeMs    int        `json:"response_time_ms,omitempty"`    // Response time in milliseconds
-	Error             string     `json:"error,omitempty"`               // Error message if unhealthy
-	RateLimitRemaining int       `json:"rate_limit_remaining,omitempty"` // For X API component
-	RateLimitResetAt  *time.Time `json:"rate_limit_reset_at,omitempty"` // For X API component when rate limited
+	Status             string     `json:"status"`                         // "healthy", "unhealthy", "rate_limited"
+	ResponseTimeMs     int        `json:"response_time_ms,omitempty"`     // Response time in milliseconds
+	Error              string     `json:"error,omitempty"`                // Error message if unhealthy
+	RateLimitRemaining int        `json:"rate_limit_remaining,omitempty"` // For X API component
+	RateLimitResetAt   *time.Time `json:"rate_limit_reset_at,omitempty"`  // For X API component when rate limited
 }
 
 // HealthResponseDTO represents system health check response
 type HealthResponseDTO struct {
-	Status     string                        `json:"status"`    // "healthy", "degraded", "unhealthy"
-	Timestamp  time.Time                     `json:"timestamp"` // Current server time
-	Version    string                        `json:"version"`   // Application version
+	Status     string                        `json:"status"`     // "healthy", "degraded", "unhealthy"
+	Timestamp  time.Time                     `json:"timestamp"`  // Current server time
+	Version    string                        `json:"version"`    // Application version
 	Components map[string]ComponentHealthDTO `json:"components"` // Component-specific health
 }
 
@@ -203,4 +223,26 @@ type ErrorDetailDTO struct {
 	Code    string                 `json:"code"`              // Error code (e.g., "INVALID_DATE_RANGE")
 	Message string                 `json:"message"`           // Human-readable error message in Polish
 	Details map[string]interface{} `json:"details,omitempty"` // Additional error context
+}
+
+// =============================================================================
+// Twitter API DTOs
+// =============================================================================
+
+// TweetDTO represents tweet data from Twitter API
+type TweetDTO struct {
+	ID             int64     `json:"id"`
+	AuthorID       int64     `json:"author_id"`
+	Text           string    `json:"text"`
+	URL            string    `json:"url"`
+	PublishedAt    time.Time `json:"published_at"`
+	ConversationID int64     `json:"conversation_id"`
+}
+
+// UserDTO represents user data from Twitter API
+type UserDTO struct {
+	ID          int64     `json:"id"`
+	Handle      string    `json:"handle"`
+	DisplayName string    `json:"display_name"`
+	LastSeenAt  time.Time `json:"last_seen_at"`
 }

@@ -28,7 +28,7 @@ create table if not exists posts (
     x_post_id bigint not null check (x_post_id > 0),
     author_id bigint not null,
     published_at timestamptz not null,
-    url text not null check (url ~ '^https?://(x|twitter)\\.com/.+/status/\\d+'),
+    url text not null,
     text text not null,
     conversation_id bigint,
     ingested_at timestamptz not null,

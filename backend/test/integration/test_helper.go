@@ -19,25 +19,37 @@ type TestRouter struct {
 	engine *gin.Engine
 }
 
-// NewTestRouter creates a new test router
+// NewTestRouter creates a new test router with default HTTP client
 func NewTestRouter(db *sqlx.DB) *TestRouter {
+	return NewTestRouterWithClient(db, nil)
+}
+
+// NewTestRouterWithClient creates a new test router with optional custom HTTP client for TwitterClient
+func NewTestRouterWithClient(db *sqlx.DB, httpClient *http.Client) *TestRouter {
 	router := gin.New()
 	router.Use(gin.Recovery())
 
 	// Initialize dependencies
 	ingestRepo := repositories.NewIngestRepository(db)
-	ingestService := services.NewIngestService(ingestRepo)
-	ingestHandler := handlers.NewIngestHandler(ingestService)
+	followingRepo := repositories.NewFollowingRepository(db)
+	postRepo := repositories.NewPostRepository(db)
+	authorRepo := repositories.NewAuthorRepository(db)
+	userRepo := repositories.NewUserRepository(db)
+	twitterClient := services.NewTwitterClient("", httpClient) // Empty API key for testing
+	openRouterClient := services.NewOpenRouterClient("", httpClient) // Empty API key for testing
+	ingestService := services.NewIngestService(twitterClient, openRouterClient, ingestRepo, followingRepo, postRepo, authorRepo, userRepo)
+	ingestStatusService := services.NewIngestStatusService(ingestRepo)
+	ingestHandler := handlers.NewIngestHandler(ingestStatusService, ingestService)
 
 	// Initialize QA dependencies
 	qaRepo := repositories.NewQARepository(db)
-	postRepo := repositories.NewPostRepository(db)
+	//postRepo := repositories.NewPostRepository(db)
 	llmService := services.NewLLMService() // Mock service for testing
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	qaHandler := handlers.NewQAHandler(qaService)
 
 	// Initialize Following dependencies
-	followingRepo := repositories.NewFollowingRepository(db)
+	//followingRepo := repositories.NewFollowingRepository(db)
 	followingService := services.NewFollowingService(followingRepo)
 	followingHandler := handlers.NewFollowingHandler(followingService)
 
@@ -47,6 +59,7 @@ func NewTestRouter(db *sqlx.DB) *TestRouter {
 	ingest.Use(testAuthMiddleware())
 	{
 		ingest.GET("/status", ingestHandler.GetIngestStatus)
+		ingest.POST("/trigger", ingestHandler.TriggerIngest)
 	}
 
 	qa := v1.Group("/qa")

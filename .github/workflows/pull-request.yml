@@ -9,8 +9,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  lint:
-    name: Lint Code
+  # Frontend Jobs
+  frontend-lint:
+    name: Frontend - Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -31,10 +32,10 @@ jobs:
         working-directory: ./frontend
         run: npm run lint
 
-  test:
-    name: Unit Tests
+  frontend-test:
+    name: Frontend - Unit Tests
     runs-on: ubuntu-latest
-    needs: lint
+    needs: frontend-lint
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,11 +76,75 @@ jobs:
             echo "coverage=N/A" >> $GITHUB_OUTPUT
           fi
 
+  # Backend Jobs
+  backend-lint:
+    name: Backend - Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: backend/go.sum
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.62.2
+
+      - name: Run golangci-lint
+        working-directory: ./backend
+        run: $(go env GOPATH)/bin/golangci-lint run --timeout=5m
+
+  backend-test:
+    name: Backend - Unit Tests
+    runs-on: ubuntu-latest
+    needs: backend-lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: backend/go.sum
+
+      - name: Run tests with coverage
+        working-directory: ./backend
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -func=coverage.out -o=coverage.txt
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage-report
+          path: |
+            backend/coverage.out
+            backend/coverage.txt
+          retention-days: 30
+
+      - name: Generate coverage summary
+        id: coverage
+        if: always()
+        working-directory: ./backend
+        run: |
+          if [ -f coverage.txt ]; then
+            COVERAGE=$(tail -1 coverage.txt | awk '{print $3}')
+            echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+          else
+            echo "coverage=N/A" >> $GITHUB_OUTPUT
+          fi
+
   status-comment:
     name: Post Status Comment
     runs-on: ubuntu-latest
-    needs: [lint, test]
-    if: always() && needs.lint.result == 'success' && needs.test.result == 'success'
+    needs: [frontend-lint, frontend-test, backend-lint, backend-test]
+    if: always() && needs.frontend-lint.result == 'success' && needs.frontend-test.result == 'success' && needs.backend-lint.result == 'success' && needs.backend-test.result == 'success'
     steps:
       - name: Post success comment
         uses: actions/github-script@v7
@@ -89,12 +154,19 @@ jobs:
 
             All checks have passed successfully!
 
+            ### Frontend
             | Job | Status |
             |-----|--------|
             | 🔍 Lint | ✅ Passed |
             | 🧪 Unit Tests | ✅ Passed |
 
-            **Coverage Report:** Available in artifacts
+            ### Backend
+            | Job | Status |
+            |-----|--------|
+            | 🔍 Lint | ✅ Passed |
+            | 🧪 Unit Tests | ✅ Passed |
+
+            **Coverage Reports:** Available in artifacts
 
             ---
             *Workflow run: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*

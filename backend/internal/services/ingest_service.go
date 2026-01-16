@@ -119,7 +119,11 @@ func (s *IngestService) IngestUserData(ctx context.Context, userID uuid.UUID, ba
 			status = "rate_limited"
 		}
 
-		s.ingestRepo.CompleteIngestRun(ctx, runID, status, totalFetched, &errText)
+		if completeErr := s.ingestRepo.CompleteIngestRun(ctx, runID, status, totalFetched, &errText); completeErr != nil {
+			logger.Warn("failed to mark ingest run as failed",
+				"error", completeErr,
+				"run_id", runID)
+		}
 		span.RecordError(err)
 		return fmt.Errorf("ingestion failed: %w", err)
 	}

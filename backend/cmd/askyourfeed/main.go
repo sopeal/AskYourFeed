@@ -41,7 +41,11 @@ func main() {
 		logger.Error("failed to initialize database", err)
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("failed to close database connection", err)
+		}
+	}()
 
 	// Initialize repositories
 	postRepo := repositories.NewPostRepository(db)

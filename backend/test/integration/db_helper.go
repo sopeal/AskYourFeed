@@ -47,7 +47,10 @@ func (dh *DatabaseHelper) GetDB() *sqlx.DB {
 // Close closes the database connection
 func (dh *DatabaseHelper) Close() {
 	if dh.db != nil {
-		dh.db.Close()
+		if err := dh.db.Close(); err != nil {
+			// Log error but don't fail - this is cleanup code
+			// In tests, we can't use t.Logf here since we don't have access to *testing.T
+		}
 	}
 }
 

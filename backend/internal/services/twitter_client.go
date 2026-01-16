@@ -164,7 +164,11 @@ func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			span.RecordError(err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

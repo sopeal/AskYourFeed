@@ -272,7 +272,9 @@ func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.IngestStatusDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
 
 		if len(response.RecentRuns) != 10 {
 			t.Errorf("Expected 10 recent runs (default), got %d", len(response.RecentRuns))
@@ -293,7 +295,9 @@ func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.IngestStatusDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
 
 		if len(response.RecentRuns) != 5 {
 			t.Errorf("Expected 5 recent runs, got %d", len(response.RecentRuns))
@@ -314,7 +318,9 @@ func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.IngestStatusDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
 
 		// Should return all 15 runs (less than limit)
 		if len(response.RecentRuns) != 15 {

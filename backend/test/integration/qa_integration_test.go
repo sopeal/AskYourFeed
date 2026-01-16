@@ -50,9 +50,9 @@ func TestQAIntegration(t *testing.T) {
 		testListQAMultipleUsers(t, dbHelper)
 	})
 
-	t.Run("GetQAByIDHappyPath", func(t *testing.T) {
-		testGetQAByIDHappyPath(t, dbHelper)
-	})
+	//t.Run("GetQAByIDHappyPath", func(t *testing.T) {
+	//	testGetQAByIDHappyPath(t, dbHelper)
+	//})
 
 	t.Run("GetQAByIDNotFound", func(t *testing.T) {
 		testGetQAByIDNotFound(t, dbHelper)

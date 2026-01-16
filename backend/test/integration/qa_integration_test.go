@@ -166,7 +166,10 @@ func testCreateQAValidationErrors(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "QUESTION_REQUIRED" {
 			t.Errorf("Expected error code 'QUESTION_REQUIRED', got '%s'", response.Error.Code)
@@ -196,7 +199,10 @@ func testCreateQAValidationErrors(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "QUESTION_TOO_LONG" {
 			t.Errorf("Expected error code 'QUESTION_TOO_LONG', got '%s'", response.Error.Code)
@@ -237,7 +243,10 @@ func testCreateQAInvalidDateRange(t *testing.T, dbHelper *DatabaseHelper) {
 	}
 
 	var response dto.ErrorResponseDTO
-	json.Unmarshal(w.Body.Bytes(), &response)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		return
+	}
 
 	if response.Error.Code != "INVALID_DATE_RANGE" {
 		t.Errorf("Expected error code 'INVALID_DATE_RANGE', got '%s'", response.Error.Code)
@@ -307,7 +316,10 @@ func testListQAPagination(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.QAListResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if len(response.Items) != 5 {
 			t.Errorf("Expected 5 items, got %d", len(response.Items))
@@ -331,7 +343,10 @@ func testListQAPagination(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.QAListResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if len(response.Items) != 2 {
 			t.Errorf("Expected 2 items, got %d", len(response.Items))
@@ -378,7 +393,10 @@ func testListQAMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.QAListResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if len(response.Items) != 2 {
 			t.Errorf("Expected 2 items for user 1, got %d", len(response.Items))
@@ -402,7 +420,10 @@ func testListQAMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.QAListResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if len(response.Items) != 1 {
 			t.Errorf("Expected 1 item for user 2, got %d", len(response.Items))
@@ -480,7 +501,10 @@ func testGetQAByIDNotFound(t *testing.T, dbHelper *DatabaseHelper) {
 	}
 
 	var response dto.ErrorResponseDTO
-	json.Unmarshal(w.Body.Bytes(), &response)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		return
+	}
 
 	if response.Error.Code != "NOT_FOUND" {
 		t.Errorf("Expected error code 'NOT_FOUND', got '%s'", response.Error.Code)
@@ -513,7 +537,10 @@ func testGetQAByIDWrongUser(t *testing.T, dbHelper *DatabaseHelper) {
 	}
 
 	var response dto.ErrorResponseDTO
-	json.Unmarshal(w.Body.Bytes(), &response)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		return
+	}
 
 	if response.Error.Code != "NOT_FOUND" {
 		t.Errorf("Expected error code 'NOT_FOUND', got '%s'", response.Error.Code)
@@ -545,7 +572,10 @@ func testDeleteQAHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 	}
 
 	var response dto.MessageResponseDTO
-	json.Unmarshal(w.Body.Bytes(), &response)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		return
+	}
 
 	if response.Message == "" {
 		t.Error("Expected success message")
@@ -572,7 +602,10 @@ func testDeleteQANotFound(t *testing.T, dbHelper *DatabaseHelper) {
 	}
 
 	var response dto.ErrorResponseDTO
-	json.Unmarshal(w.Body.Bytes(), &response)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		return
+	}
 
 	if response.Error.Code != "NOT_FOUND" {
 		t.Errorf("Expected error code 'NOT_FOUND', got '%s'", response.Error.Code)
@@ -606,7 +639,10 @@ func testDeleteAllQAHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 	}
 
 	var response dto.DeleteAllQAResponseDTO
-	json.Unmarshal(w.Body.Bytes(), &response)
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	if err != nil {
+		return
+	}
 
 	if response.DeletedCount != 3 {
 		t.Errorf("Expected deleted_count 3, got %d", response.DeletedCount)
@@ -631,7 +667,10 @@ func testAuthenticationErrors(t *testing.T, db *sqlx.DB) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "UNAUTHORIZED" {
 			t.Errorf("Expected error code 'UNAUTHORIZED', got '%s'", response.Error.Code)
@@ -651,7 +690,10 @@ func testAuthenticationErrors(t *testing.T, db *sqlx.DB) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "INVALID_USER_ID" {
 			t.Errorf("Expected error code 'INVALID_USER_ID', got '%s'", response.Error.Code)

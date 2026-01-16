@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, User } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { SyncStatusIndicator } from './SyncStatusIndicator';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import {

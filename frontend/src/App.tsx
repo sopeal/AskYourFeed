@@ -4,7 +4,8 @@ import { RegisterView } from './views/RegisterView';
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
 import { HistoryView } from './views/HistoryView';
-import { ProtectedRoute, isAuthenticated } from './components/shared/ProtectedRoute';
+import { ProtectedRoute } from './components/shared/ProtectedRoute';
+import { isAuthenticated } from './components/shared/auth-utils';
 import './App.css';
 
 // Create a client for React Query

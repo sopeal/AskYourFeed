@@ -272,7 +272,9 @@ func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.IngestStatusDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
 
 		if len(response.RecentRuns) != 10 {
 			t.Errorf("Expected 10 recent runs (default), got %d", len(response.RecentRuns))
@@ -293,7 +295,9 @@ func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.IngestStatusDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
 
 		if len(response.RecentRuns) != 5 {
 			t.Errorf("Expected 5 recent runs, got %d", len(response.RecentRuns))
@@ -314,7 +318,9 @@ func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.IngestStatusDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+			t.Fatalf("Failed to unmarshal response: %v", err)
+		}
 
 		// Should return all 15 runs (less than limit)
 		if len(response.RecentRuns) != 15 {
@@ -345,7 +351,10 @@ func testEdgeCases(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "INVALID_LIMIT" {
 			t.Errorf("Expected error code 'INVALID_LIMIT', got '%s'", response.Error.Code)
@@ -369,7 +378,10 @@ func testEdgeCases(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "INVALID_LIMIT" {
 			t.Errorf("Expected error code 'INVALID_LIMIT', got '%s'", response.Error.Code)
@@ -393,7 +405,10 @@ func testEdgeCases(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "INVALID_LIMIT" {
 			t.Errorf("Expected error code 'INVALID_LIMIT', got '%s'", response.Error.Code)
@@ -417,7 +432,10 @@ func testEdgeCases(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "INVALID_LIMIT" {
 			t.Errorf("Expected error code 'INVALID_LIMIT', got '%s'", response.Error.Code)
@@ -441,7 +459,10 @@ func testErrorCases(t *testing.T, db *sqlx.DB) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "UNAUTHORIZED" {
 			t.Errorf("Expected error code 'UNAUTHORIZED', got '%s'", response.Error.Code)
@@ -462,7 +483,10 @@ func testErrorCases(t *testing.T, db *sqlx.DB) {
 		}
 
 		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		if response.Error.Code != "INVALID_USER_ID" {
 			t.Errorf("Expected error code 'INVALID_USER_ID', got '%s'", response.Error.Code)
@@ -505,7 +529,10 @@ func testMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.IngestStatusDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		// User 1 should see 2 runs
 		if len(response.RecentRuns) != 2 {
@@ -527,7 +554,10 @@ func testMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 		}
 
 		var response dto.IngestStatusDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+		err := json.Unmarshal(w.Body.Bytes(), &response)
+		if err != nil {
+			return
+		}
 
 		// User 2 should see 1 run
 		if len(response.RecentRuns) != 1 {

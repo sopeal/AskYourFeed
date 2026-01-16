@@ -164,7 +164,11 @@ func (c *TwitterClient) makeRequest(ctx context.Context, method, endpoint string
 		span.RecordError(err)
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			span.RecordError(err)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -371,18 +375,6 @@ func (c *TwitterClient) normalizeTwitterURL(rawURL, authorHandle, tweetID string
 	
 	// Return clean URL: scheme://host/path (without query or fragment)
 	return fmt.Sprintf("%s://%s%s", scheme, host, parsedURL.Path)
-}
-
-// isValidTwitterURL checks if a URL matches the expected Twitter/X URL format
-func (c *TwitterClient) isValidTwitterURL(url string) bool {
-	// Check if URL matches the pattern: https?://(x|twitter)\.com/.+/status/\d+
-	// This is a simple check - the database will do the final validation
-	return len(url) > 0 && 
-		(strings.HasPrefix(url, "https://twitter.com/") || 
-		 strings.HasPrefix(url, "http://twitter.com/") ||
-		 strings.HasPrefix(url, "https://x.com/") || 
-		 strings.HasPrefix(url, "http://x.com/")) &&
-		strings.Contains(url, "/status/")
 }
 
 // ConvertUserToDTO converts UserData to UserDTO

@@ -111,11 +111,17 @@ func (dm *DockerManager) startContainer() error {
 func (dm *DockerManager) stopContainer() {
 	// Stop container
 	stopCmd := exec.Command("docker", "stop", dm.containerName)
-	stopCmd.Run()
+	if err := stopCmd.Run(); err != nil {
+		// Log but don't fail - container might not be running
+		log.Printf("Warning: failed to stop container %s: %v", dm.containerName, err)
+	}
 
 	// Remove container
 	rmCmd := exec.Command("docker", "rm", dm.containerName)
-	rmCmd.Run()
+	if err := rmCmd.Run(); err != nil {
+		// Log but don't fail - container might not exist
+		log.Printf("Warning: failed to remove container %s: %v", dm.containerName, err)
+	}
 
 	log.Printf("Stopped and removed container: %s", dm.containerName)
 }

@@ -14,6 +14,13 @@ export const useToast = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   /**
+   * Dismiss a specific toast
+   */
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
+  /**
    * Show a toast notification
    * Auto-dismisses after 5 seconds
    */
@@ -29,14 +36,7 @@ export const useToast = () => {
     }, 5000);
 
     return id;
-  }, []);
-
-  /**
-   * Dismiss a specific toast
-   */
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  }, []);
+  }, [dismissToast]);
 
   /**
    * Show error toast

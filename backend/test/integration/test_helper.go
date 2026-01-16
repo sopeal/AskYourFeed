@@ -35,7 +35,7 @@ func NewTestRouterWithClient(db *sqlx.DB, httpClient *http.Client) *TestRouter {
 	postRepo := repositories.NewPostRepository(db)
 	authorRepo := repositories.NewAuthorRepository(db)
 	userRepo := repositories.NewUserRepository(db)
-	twitterClient := services.NewTwitterClient("", httpClient) // Empty API key for testing
+	twitterClient := services.NewTwitterClient("", httpClient)       // Empty API key for testing
 	openRouterClient := services.NewOpenRouterClient("", httpClient) // Empty API key for testing
 	ingestService := services.NewIngestService(twitterClient, openRouterClient, ingestRepo, followingRepo, postRepo, authorRepo, userRepo)
 	ingestStatusService := services.NewIngestStatusService(ingestRepo)
@@ -44,7 +44,7 @@ func NewTestRouterWithClient(db *sqlx.DB, httpClient *http.Client) *TestRouter {
 	// Initialize QA dependencies
 	qaRepo := repositories.NewQARepository(db)
 	//postRepo := repositories.NewPostRepository(db)
-	llmService := services.NewLLMService() // Mock service for testing
+	llmService := services.NewLLMService(openRouterClient) // Mock service for testing
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	qaHandler := handlers.NewQAHandler(qaService)
 

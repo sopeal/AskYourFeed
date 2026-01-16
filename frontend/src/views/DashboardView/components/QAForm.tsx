@@ -23,7 +23,6 @@ export const QAForm = ({ onSubmit, isLoading }: QAFormProps) => {
     register,
     handleSubmit,
     formState: { errors },
-    reset,
   } = useForm<QAFormData>({
     resolver: zodResolver(qaFormSchema),
     defaultValues: {

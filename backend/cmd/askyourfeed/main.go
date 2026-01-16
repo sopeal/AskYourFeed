@@ -41,7 +41,11 @@ func main() {
 		logger.Error("failed to initialize database", err)
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			logger.Error("failed to close database connection", err)
+		}
+	}()
 
 	// Initialize repositories
 	postRepo := repositories.NewPostRepository(db)
@@ -297,7 +301,7 @@ func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Allow specific origin for development (Vite dev server)
 		// In production, this should be configurable
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5174")
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

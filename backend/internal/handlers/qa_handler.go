@@ -12,12 +12,9 @@ import (
 	"github.com/sopeal/AskYourFeed/internal/dto"
 	"github.com/sopeal/AskYourFeed/internal/services"
 	"github.com/sopeal/AskYourFeed/pkg/logger"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
-
-var tracer = otel.Tracer("qa_handler")
 
 // QAHandler handles Q&A related HTTP requests
 type QAHandler struct {

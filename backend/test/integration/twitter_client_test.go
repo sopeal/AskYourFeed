@@ -226,10 +226,12 @@ func TestGetUserTweets(t *testing.T) {
 					assert.Equal(t, tt.cursor, query.Get("cursor"))
 				}
 
-				// Send mock response
-				w.WriteHeader(tt.mockStatusCode)
-				w.Write([]byte(tt.mockResponse))
-			}))
+			// Send mock response
+			w.WriteHeader(tt.mockStatusCode)
+			if _, err := w.Write([]byte(tt.mockResponse)); err != nil {
+				t.Errorf("Failed to write response: %v", err)
+			}
+		}))
 			defer server.Close()
 
 			// Create Twitter client with mock server URL
@@ -261,10 +263,7 @@ func TestGetUserTweets_ContextCancellation(t *testing.T) {
 	// Create a mock server that delays response
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate a slow response
-		select {
-		case <-r.Context().Done():
-			return
-		}
+		<-r.Context().Done()
 	}))
 	defer server.Close()
 
@@ -319,7 +318,9 @@ func TestGetUserTweets_ResponseStructure(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write(mockJSON)
+		if _, err := w.Write(mockJSON); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

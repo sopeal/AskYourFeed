@@ -90,13 +90,12 @@ jobs:
           go-version: '1.25'
           cache-dependency-path: backend/go.sum
 
-      - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.8.0
-
       - name: Run golangci-lint
-        working-directory: ./backend
-        run: $(go env GOPATH)/bin/golangci-lint run --timeout=5m
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.8.0
+          working-directory: backend
+          args: --timeout=5m
 
   backend-test:
     name: Backend - Unit Tests

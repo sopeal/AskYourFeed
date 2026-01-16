@@ -132,7 +132,7 @@ func (c *OpenRouterClient) DescribeImages(ctx context.Context, imageURLs []strin
 // Note: OpenRouter doesn't directly support video transcription via API
 // This is a placeholder for future implementation or alternative service
 func (c *OpenRouterClient) TranscribeVideo(ctx context.Context, videoURL string, durationSeconds int, sizeBytes int64) (string, error) {
-	ctx, span := openRouterTracer.Start(ctx, "TranscribeVideo")
+	_, span := openRouterTracer.Start(ctx, "TranscribeVideo")
 	defer span.End()
 
 	span.SetAttributes(

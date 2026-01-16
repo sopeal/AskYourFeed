@@ -377,18 +377,6 @@ func (c *TwitterClient) normalizeTwitterURL(rawURL, authorHandle, tweetID string
 	return fmt.Sprintf("%s://%s%s", scheme, host, parsedURL.Path)
 }
 
-// isValidTwitterURL checks if a URL matches the expected Twitter/X URL format
-func (c *TwitterClient) isValidTwitterURL(url string) bool {
-	// Check if URL matches the pattern: https?://(x|twitter)\.com/.+/status/\d+
-	// This is a simple check - the database will do the final validation
-	return len(url) > 0 && 
-		(strings.HasPrefix(url, "https://twitter.com/") || 
-		 strings.HasPrefix(url, "http://twitter.com/") ||
-		 strings.HasPrefix(url, "https://x.com/") || 
-		 strings.HasPrefix(url, "http://x.com/")) &&
-		strings.Contains(url, "/status/")
-}
-
 // ConvertUserToDTO converts UserData to UserDTO
 func (c *TwitterClient) ConvertUserToDTO(user UserData) *dto.UserDTO {
 	// Parse created_at timestamp

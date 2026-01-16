@@ -108,11 +108,10 @@ func (s *QAService) CreateQA(
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
-			// Rollback error is expected if transaction was committed
-			// Only log if it's not the "transaction already committed" error
-			// In Go's sql package, Rollback after Commit returns sql.ErrTxDone
-		}
+		// Rollback error is expected if transaction was committed
+		// Only log if it's not the "transaction already committed" error
+		// In Go's sql package, Rollback after Commit returns sql.ErrTxDone
+		_ = tx.Rollback()
 	}()
 
 	// Insert Q&A message

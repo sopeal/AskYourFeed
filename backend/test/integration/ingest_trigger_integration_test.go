@@ -66,7 +66,9 @@ func testTriggerHappyPath(t *testing.T, dbHelper *DatabaseHelper, dataHelper *Te
 
 	// Count before
 	var countBefore int
-	conn.QueryRow("SELECT COUNT(*) FROM ingest_runs WHERE user_id = $1", userID).Scan(&countBefore)
+	if err := conn.QueryRow("SELECT COUNT(*) FROM ingest_runs WHERE user_id = $1", userID).Scan(&countBefore); err != nil {
+		t.Fatalf("Failed to count runs before: %v", err)
+	}
 
 	// Trigger
 	w := httptest.NewRecorder()
@@ -95,7 +97,9 @@ func testTriggerHappyPath(t *testing.T, dbHelper *DatabaseHelper, dataHelper *Te
 
 	// Check new run created and completed with error (API fail)
 	var countAfter int
-	conn.QueryRow("SELECT COUNT(*) FROM ingest_runs WHERE user_id = $1", userID).Scan(&countAfter)
+	if err := conn.QueryRow("SELECT COUNT(*) FROM ingest_runs WHERE user_id = $1", userID).Scan(&countAfter); err != nil {
+		t.Fatalf("Failed to count runs after: %v", err)
+	}
 	if countAfter != countBefore+1 {
 		t.Errorf("Expected 1 new run, got %d (before %d)", countAfter-countBefore, countBefore)
 	}
@@ -217,7 +221,9 @@ func testTriggerConflict(t *testing.T, dbHelper *DatabaseHelper, dataHelper *Tes
 	_ = dataHelper.InsertIngestRun(t, userID, now.Add(-30*time.Second), nil, "ok", 5, 0, 0, nil)
 
 	var countBefore int
-	conn.QueryRow("SELECT COUNT(*) FROM ingest_runs WHERE user_id = $1", userID).Scan(&countBefore)
+	if err := conn.QueryRow("SELECT COUNT(*) FROM ingest_runs WHERE user_id = $1", userID).Scan(&countBefore); err != nil {
+		t.Fatalf("Failed to count runs before: %v", err)
+	}
 
 	router := NewTestRouter(conn).GetEngine()
 
@@ -238,7 +244,9 @@ func testTriggerConflict(t *testing.T, dbHelper *DatabaseHelper, dataHelper *Tes
 
 	// Check no new run created (service skipped)
 	var countAfter int
-	conn.QueryRow("SELECT COUNT(*) FROM ingest_runs WHERE user_id = $1", userID).Scan(&countAfter)
+	if err := conn.QueryRow("SELECT COUNT(*) FROM ingest_runs WHERE user_id = $1", userID).Scan(&countAfter); err != nil {
+		t.Fatalf("Failed to count runs after: %v", err)
+	}
 	if countAfter != countBefore {
 		t.Errorf("Expected no new run (service skipped), got %d (before %d)", countAfter, countBefore)
 	}

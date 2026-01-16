@@ -73,7 +73,7 @@ func (s *authService) Register(ctx context.Context, cmd dto.RegisterCommand) (*d
 	// Validate X username via Twitter API
 	userInfo, err := s.twitterAPI.GetUserInfo(ctx, cmd.XUsername)
 	if err != nil {
-		return nil, fmt.Errorf("X username validation failed: %w", err)
+		return nil, fmt.Errorf("x username validation failed: %w", err)
 	}
 
 	// Hash password

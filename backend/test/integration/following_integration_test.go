@@ -169,10 +169,12 @@ func testFollowingErrorCases(t *testing.T, db *sqlx.DB) {
 			t.Errorf("Expected status 401, got %d", w.Code)
 		}
 
-		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+	var response dto.ErrorResponseDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
 
-		if response.Error.Code != "UNAUTHORIZED" {
+	if response.Error.Code != "UNAUTHORIZED" {
 			t.Errorf("Expected error code 'UNAUTHORIZED', got '%s'", response.Error.Code)
 		}
 	})
@@ -190,10 +192,12 @@ func testFollowingErrorCases(t *testing.T, db *sqlx.DB) {
 			t.Errorf("Expected status 400, got %d", w.Code)
 		}
 
-		var response dto.ErrorResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+	var response dto.ErrorResponseDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
 
-		if response.Error.Code != "INVALID_USER_ID" {
+	if response.Error.Code != "INVALID_USER_ID" {
 			t.Errorf("Expected error code 'INVALID_USER_ID', got '%s'", response.Error.Code)
 		}
 	})
@@ -241,10 +245,12 @@ func testFollowingMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
 
-		var response dto.FollowingListResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+	var response dto.FollowingListResponseDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
 
-		// User 1 should see 2 authors
+	// User 1 should see 2 authors
 		if len(response.Items) != 2 {
 			t.Errorf("Expected 2 items for user 1, got %d", len(response.Items))
 		}
@@ -270,10 +276,12 @@ func testFollowingMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
 
-		var response dto.FollowingListResponseDTO
-		json.Unmarshal(w.Body.Bytes(), &response)
+	var response dto.FollowingListResponseDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
 
-		// User 2 should see 2 authors
+	// User 2 should see 2 authors
 		if len(response.Items) != 2 {
 			t.Errorf("Expected 2 items for user 2, got %d", len(response.Items))
 		}

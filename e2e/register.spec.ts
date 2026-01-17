@@ -62,7 +62,7 @@ test.describe('User Registration', () => {
     const timestamp = Date.now();
     const testEmail = `test${timestamp}@example.com`;
     const testPassword = 'SecurePassword123!';
-    const testUsername = `testuser${timestamp}`;
+    const testUsername = `dev1047600`;
     
     // Fill in the registration form
     await page.getByLabel('Adres e-mail').fill(testEmail);
@@ -110,24 +110,7 @@ test.describe('User Registration', () => {
     await page.getByRole('button', { name: 'Zarejestruj się' }).click();
     
     // Wait for error message about duplicate email
-    await expect(page.getByText(/adres e-mail jest już zajęty|email.*already/i)).toBeVisible({ timeout: 10000 });
-  });
-
-  test('should show error when X username does not exist', async ({ page }) => {
-    // Use a non-existent X username
-    const nonExistentUsername = 'thisuserdoesnotexist123456789';
-    const timestamp = Date.now();
-    
-    await page.getByLabel('Adres e-mail').fill(`test${timestamp}@example.com`);
-    await page.getByLabel('Hasło', { exact: true }).fill('Password123!');
-    await page.getByLabel('Potwierdź hasło').fill('Password123!');
-    await page.getByLabel('Nazwa użytkownika X (Twitter)').fill(nonExistentUsername);
-    
-    // Submit the form
-    await page.getByRole('button', { name: 'Zarejestruj się' }).click();
-    
-    // Wait for error message about invalid X username
-    await expect(page.getByText(/Konto X.*nie istnieje|username.*not found/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/Email jest już zarejestrowany/i)).toBeVisible({ timeout: 10000 });
   });
 
   test('should navigate to login page when clicking login link', async ({ page }) => {

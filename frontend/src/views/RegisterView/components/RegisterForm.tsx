@@ -72,10 +72,11 @@ export const RegisterForm = () => {
                 message: 'Podany adres e-mail jest już zajęty.',
               });
               break;
+            case 'INVALID_X_USERNAME':
             case 'X_USERNAME_NOT_FOUND':
               setError('xUsername', {
                 type: 'manual',
-                message: `Konto X o nazwie '${registerCommand.x_username}' nie istnieje. Sprawdź poprawność nazwy użytkownika.`,
+                message: `Konto ${registerCommand.x_username} nie istnieje`,
               });
               break;
             case 'VALIDATION_ERROR':

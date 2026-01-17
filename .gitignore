@@ -47,3 +47,10 @@ logs/
 Thumbs.db
 
 askyourfeed
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

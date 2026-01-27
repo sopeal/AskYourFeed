@@ -1,4 +1,4 @@
-package integration
+package integration_test
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sopeal/AskYourFeed/internal/dto"
+	"github.com/sopeal/AskYourFeed/internal/testutil"
 )
 
 // TestQAIntegration contains all integration tests for the QA endpoints
@@ -20,7 +21,7 @@ func TestQAIntegration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Initialize test database
-	dbHelper := NewDatabaseHelper(t)
+	dbHelper := testutil.NewDatabaseHelper(t)
 	defer dbHelper.Close()
 
 	db := dbHelper.GetDB()
@@ -84,20 +85,20 @@ func TestQAIntegration(t *testing.T) {
 }
 
 // testCreateQAHappyPath tests successful QA creation
-//func testCreateQAHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
+//func testCreateQAHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 //	dbHelper.CleanupTestData(t)
 //
 //	db := dbHelper.GetDB()
-//	dataHelper := NewTestDataHelper(db)
+//	dataHelper := testutil.NewTestDataHelper(db)
 //	userID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 //	now := time.Now().UTC()
 //
 //	// Insert test author and posts
-//	dataHelper.InsertAuthor(t, 12345, "testuser", StringPtr("Test User"), &now)
+//	dataHelper.InsertAuthor(t, 12345, "testuser", testutil.StringPtr("Test User"), &now)
 //	dataHelper.InsertPost(t, userID, 1001, 12345, now.Add(-1*time.Hour), "https://twitter.com/testuser/status/1001", "This is a test post about AI and machine learning.", nil, now, now, false)
 //	dataHelper.InsertPost(t, userID, 1002, 12345, now.Add(-2*time.Hour), "https://twitter.com/testuser/status/1002", "Another post discussing artificial intelligence trends.", nil, now, now, false)
 //
-//	router := NewTestRouter(db).GetEngine()
+//	router := testutil.NewTestRouter(db).GetEngine()
 //
 //	// Create QA request
 //	requestBody := dto.CreateQACommand{
@@ -139,9 +140,9 @@ func TestQAIntegration(t *testing.T) {
 //}
 
 // testCreateQAValidationErrors tests validation error scenarios
-func testCreateQAValidationErrors(t *testing.T, dbHelper *DatabaseHelper) {
+func testCreateQAValidationErrors(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	db := dbHelper.GetDB()
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 
 	t.Run("EmptyQuestion", func(t *testing.T) {
@@ -211,9 +212,9 @@ func testCreateQAValidationErrors(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testCreateQAInvalidDateRange tests invalid date range scenarios
-func testCreateQAInvalidDateRange(t *testing.T, dbHelper *DatabaseHelper) {
+func testCreateQAInvalidDateRange(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	db := dbHelper.GetDB()
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
 
 	dbHelper.CleanupTestData(t)
@@ -254,13 +255,13 @@ func testCreateQAInvalidDateRange(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testListQAEmpty tests listing QA when user has no QAs
-func testListQAEmpty(t *testing.T, dbHelper *DatabaseHelper) {
+func testListQAEmpty(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/qa", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -286,11 +287,11 @@ func testListQAEmpty(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testListQAPagination tests QA listing with pagination
-func testListQAPagination(t *testing.T, dbHelper *DatabaseHelper) {
+func testListQAPagination(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000005")
 	now := time.Now().UTC()
 
@@ -300,7 +301,7 @@ func testListQAPagination(t *testing.T, dbHelper *DatabaseHelper) {
 		dataHelper.InsertQAMessage(t, userID, "Question "+string(rune(i+65)), "Answer "+string(rune(i+65)), now.Add(-24*time.Hour), now, createdAt)
 	}
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	// Test default pagination (limit 20)
 	t.Run("DefaultPagination", func(t *testing.T) {
@@ -361,11 +362,11 @@ func testListQAPagination(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testListQAMultipleUsers tests data isolation between users
-func testListQAMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
+func testListQAMultipleUsers(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	user1ID := uuid.MustParse("00000000-0000-0000-0000-000000000011")
 	user2ID := uuid.MustParse("00000000-0000-0000-0000-000000000012")
 	now := time.Now().UTC()
@@ -377,7 +378,7 @@ func testListQAMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 	// Insert data for user 2
 	dataHelper.InsertQAMessage(t, user2ID, "User 2 Question", "User 2 Answer", now.Add(-24*time.Hour), now, now.Add(-1*time.Hour))
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	// Request for user 1
 	t.Run("User1Data", func(t *testing.T) {
@@ -435,22 +436,22 @@ func testListQAMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testGetQAByIDHappyPath tests successful QA retrieval by ID
-//func testGetQAByIDHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
+//func testGetQAByIDHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 //	dbHelper.CleanupTestData(t)
 //
 //	db := dbHelper.GetDB()
-//	dataHelper := NewTestDataHelper(db)
+//	dataHelper := testutil.NewTestDataHelper(db)
 //	userID := uuid.MustParse("00000000-0000-0000-0000-000000000006")
 //	now := time.Now().UTC()
 //
 //	// Insert test data
-//	dataHelper.InsertAuthor(t, 12346, "testuser2", StringPtr("Test User 2"), &now)
+//	dataHelper.InsertAuthor(t, 12346, "testuser2", testutil.StringPtr("Test User 2"), &now)
 //	dataHelper.InsertPost(t, userID, 2001, 12346, now.Add(-1*time.Hour), "https://twitter.com/testuser2/status/2001", "Test post content", nil, now, now, false)
 //
 //	qaID := dataHelper.InsertQAMessage(t, userID, "Test question", "Test answer", now.Add(-24*time.Hour), now, now)
 //	dataHelper.InsertQASource(t, qaID, userID, 2001)
 //
-//	router := NewTestRouter(db).GetEngine()
+//	router := testutil.NewTestRouter(db).GetEngine()
 //	w := httptest.NewRecorder()
 //	req, _ := http.NewRequest("GET", "/api/v1/qa/"+qaID, nil)
 //	req.Header.Set("Authorization", "Bearer test-token")
@@ -482,13 +483,13 @@ func testListQAMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 //}
 
 // testGetQAByIDNotFound tests QA retrieval when ID doesn't exist
-func testGetQAByIDNotFound(t *testing.T, dbHelper *DatabaseHelper) {
+func testGetQAByIDNotFound(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000007")
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/qa/01HXXXXXXXXXXXXXXXXXXXXX", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -512,11 +513,11 @@ func testGetQAByIDNotFound(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testGetQAByIDWrongUser tests QA retrieval when QA belongs to different user
-func testGetQAByIDWrongUser(t *testing.T, dbHelper *DatabaseHelper) {
+func testGetQAByIDWrongUser(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	user1ID := uuid.MustParse("00000000-0000-0000-0000-000000000008")
 	user2ID := uuid.MustParse("00000000-0000-0000-0000-000000000009")
 	now := time.Now().UTC()
@@ -524,7 +525,7 @@ func testGetQAByIDWrongUser(t *testing.T, dbHelper *DatabaseHelper) {
 	// Insert QA for user 1
 	qaID := dataHelper.InsertQAMessage(t, user1ID, "User 1 question", "User 1 answer", now.Add(-24*time.Hour), now, now)
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/qa/"+qaID, nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -548,18 +549,18 @@ func testGetQAByIDWrongUser(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testDeleteQAHappyPath tests successful QA deletion
-func testDeleteQAHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
+func testDeleteQAHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000010")
 	now := time.Now().UTC()
 
 	// Insert QA
 	qaID := dataHelper.InsertQAMessage(t, userID, "Test question", "Test answer", now.Add(-24*time.Hour), now, now)
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/qa/"+qaID, nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -583,13 +584,13 @@ func testDeleteQAHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testDeleteQANotFound tests QA deletion when ID doesn't exist
-func testDeleteQANotFound(t *testing.T, dbHelper *DatabaseHelper) {
+func testDeleteQANotFound(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000011")
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/qa/01HXXXXXXXXXXXXXXXXXXXXX", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -613,11 +614,11 @@ func testDeleteQANotFound(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testDeleteAllQAHappyPath tests successful deletion of all user QAs
-func testDeleteAllQAHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
+func testDeleteAllQAHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000012")
 	now := time.Now().UTC()
 
@@ -626,7 +627,7 @@ func testDeleteAllQAHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 	dataHelper.InsertQAMessage(t, userID, "Question 2", "Answer 2", now.Add(-24*time.Hour), now, now)
 	dataHelper.InsertQAMessage(t, userID, "Question 3", "Answer 3", now.Add(-24*time.Hour), now, now)
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("DELETE", "/api/v1/qa", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -654,7 +655,7 @@ func testDeleteAllQAHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 
 // testAuthenticationErrors tests authentication error scenarios
 func testAuthenticationErrors(t *testing.T, db *sqlx.DB) {
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	t.Run("MissingAuthHeader", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -702,9 +703,9 @@ func testAuthenticationErrors(t *testing.T, db *sqlx.DB) {
 }
 
 // testQAEdgeCases tests edge cases and boundary conditions for QA endpoints
-func testQAEdgeCases(t *testing.T, dbHelper *DatabaseHelper) {
+func testQAEdgeCases(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	db := dbHelper.GetDB()
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	t.Run("InvalidQAID", func(t *testing.T) {
 		dbHelper.CleanupTestData(t)

@@ -1,4 +1,4 @@
-package integration
+package testutil
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ func NewDatabaseHelper(t *testing.T) *DatabaseHelper {
 
 	// Use test database URL from environment or default to test container
 	defaultURL := fmt.Sprintf("postgres://%s:%s@localhost:%s/%s?sslmode=disable",
-		testDBUser, testDBPassword, testDBPort, testDBName)
+		GetTestDBUser(), GetTestDBPassword(), GetTestDBPort(), GetTestDBName())
 	dbURL := getEnv("TEST_DATABASE_URL", defaultURL)
 
 	db, err := sqlx.Connect("postgres", dbURL)
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS posts (
     x_post_id bigint NOT NULL CHECK (x_post_id > 0),
     author_id bigint NOT NULL,
     published_at timestamptz NOT NULL,
-    url text NOT NULL CHECK (url ~ '^https?://(x|twitter)\\.com/.+/status/\\d+'),
+    url text NOT NULL CHECK (url ~ '^https?://(x|twitter)\.com/.+/status/\d+'),
     text text NOT NULL,
     conversation_id bigint,
     ingested_at timestamptz NOT NULL,
@@ -177,7 +177,7 @@ CREATE POLICY user_isolation_qa_sources ON qa_sources
 func (dh *DatabaseHelper) CleanupTestData(t *testing.T) {
 	t.Helper()
 
-	_, err := dh.db.Exec("TRUNCATE TABLE qa_sources, qa_messages, posts, ingest_runs, authors CASCADE")
+	_, err := dh.db.Exec("TRUNCATE TABLE qa_sources, qa_messages, posts, ingest_runs, user_following, authors CASCADE")
 	if err != nil {
 		t.Fatalf("Failed to cleanup test data: %v", err)
 	}

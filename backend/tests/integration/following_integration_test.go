@@ -1,4 +1,4 @@
-package integration
+package integration_test
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sopeal/AskYourFeed/internal/dto"
+	"github.com/sopeal/AskYourFeed/internal/testutil"
 )
 
 // TestFollowingIntegration contains all integration tests for the following endpoint
@@ -19,7 +20,7 @@ func TestFollowingIntegration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Initialize test database
-	dbHelper := NewDatabaseHelper(t)
+	dbHelper := testutil.NewDatabaseHelper(t)
 	defer dbHelper.Close()
 
 	db := dbHelper.GetDB()
@@ -43,11 +44,11 @@ func TestFollowingIntegration(t *testing.T) {
 }
 
 // testFollowingHappyPath tests the happy path scenario with following data
-func testFollowingHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
+func testFollowingHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	now := time.Now().UTC()
 
@@ -60,9 +61,9 @@ func testFollowingHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 	lastSeen2 := now.Add(-2 * time.Hour)
 	lastSeen3 := now.Add(-3 * time.Hour)
 
-	dataHelper.InsertAuthor(t, author1ID, "@author1", StringPtr("Author One"), &lastSeen1)
-	dataHelper.InsertAuthor(t, author2ID, "@author2", StringPtr("Author Two"), &lastSeen2)
-	dataHelper.InsertAuthor(t, author3ID, "@author3", StringPtr("Author Three"), &lastSeen3)
+	dataHelper.InsertAuthor(t, author1ID, "@author1", testutil.StringPtr("Author One"), &lastSeen1)
+	dataHelper.InsertAuthor(t, author2ID, "@author2", testutil.StringPtr("Author Two"), &lastSeen2)
+	dataHelper.InsertAuthor(t, author3ID, "@author3", testutil.StringPtr("Author Three"), &lastSeen3)
 
 	// Insert user following relationships
 	lastChecked1 := now.Add(-30 * time.Minute)
@@ -74,7 +75,7 @@ func testFollowingHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 	dataHelper.InsertUserFollowing(t, userID, author3ID, &lastChecked3)
 
 	// Setup router and make request
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/following", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -125,13 +126,13 @@ func testFollowingHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testFollowingNoData tests the scenario when user follows no authors
-func testFollowingNoData(t *testing.T, dbHelper *DatabaseHelper) {
+func testFollowingNoData(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/following", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -156,7 +157,7 @@ func testFollowingNoData(t *testing.T, dbHelper *DatabaseHelper) {
 
 // testFollowingErrorCases tests error scenarios
 func testFollowingErrorCases(t *testing.T, db *sqlx.DB) {
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	// Test missing authorization header
 	t.Run("MissingAuthHeader", func(t *testing.T) {
@@ -204,11 +205,11 @@ func testFollowingErrorCases(t *testing.T, db *sqlx.DB) {
 }
 
 // testFollowingMultipleUsers tests data isolation between users
-func testFollowingMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
+func testFollowingMultipleUsers(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	user1ID := uuid.MustParse("00000000-0000-0000-0000-000000000021")
 	user2ID := uuid.MustParse("00000000-0000-0000-0000-000000000022")
 	now := time.Now().UTC()
@@ -218,9 +219,9 @@ func testFollowingMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 	author2ID := int64(222222222)
 	author3ID := int64(333333333)
 
-	dataHelper.InsertAuthor(t, author1ID, "@shared1", StringPtr("Shared Author 1"), &now)
-	dataHelper.InsertAuthor(t, author2ID, "@user1only", StringPtr("User1 Only"), &now)
-	dataHelper.InsertAuthor(t, author3ID, "@user2only", StringPtr("User2 Only"), &now)
+	dataHelper.InsertAuthor(t, author1ID, "@shared1", testutil.StringPtr("Shared Author 1"), &now)
+	dataHelper.InsertAuthor(t, author2ID, "@user1only", testutil.StringPtr("User1 Only"), &now)
+	dataHelper.InsertAuthor(t, author3ID, "@user2only", testutil.StringPtr("User2 Only"), &now)
 
 	// User 1 follows authors 1 and 2
 	dataHelper.InsertUserFollowing(t, user1ID, author1ID, &now)
@@ -230,7 +231,7 @@ func testFollowingMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 	dataHelper.InsertUserFollowing(t, user2ID, author1ID, &now)
 	dataHelper.InsertUserFollowing(t, user2ID, author3ID, &now)
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	// Request for user 1
 	t.Run("User1Data", func(t *testing.T) {

@@ -1,4 +1,4 @@
-package integration
+package testutil
 
 import (
 	"fmt"
@@ -168,4 +168,24 @@ func (dm *DockerManager) createDatabase() error {
 func (dm *DockerManager) GetDatabaseURL() string {
 	return fmt.Sprintf("postgres://%s:%s@localhost:%s/%s?sslmode=disable",
 		dm.dbUser, dm.dbPassword, dm.dbPort, dm.dbName)
+}
+
+// GetTestDBUser returns the test database user
+func GetTestDBUser() string {
+	return testDBUser
+}
+
+// GetTestDBPassword returns the test database password
+func GetTestDBPassword() string {
+	return testDBPassword
+}
+
+// GetTestDBPort returns the test database port
+func GetTestDBPort() string {
+	return testDBPort
+}
+
+// GetTestDBName returns the test database name
+func GetTestDBName() string {
+	return testDBName
 }

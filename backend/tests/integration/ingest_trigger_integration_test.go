@@ -1,4 +1,4 @@
-package integration
+package integration_test
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/sopeal/AskYourFeed/pkg/logger"
+	"github.com/sopeal/AskYourFeed/internal/testutil"
 )
 
 // TestIngestTriggerIntegration contains all integration tests for the ingest trigger endpoint
@@ -21,11 +22,11 @@ func TestIngestTriggerIntegration(t *testing.T) {
 	logger.Init(slog.LevelInfo)
 
 	// Initialize test database
-	dbHelper := NewDatabaseHelper(t)
+	dbHelper := testutil.NewDatabaseHelper(t)
 	defer dbHelper.Close()
 
 	conn := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(conn)
+	dataHelper := testutil.NewTestDataHelper(conn)
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
 	// Run test suite
@@ -55,11 +56,11 @@ func TestIngestTriggerIntegration(t *testing.T) {
 }
 
 // testTriggerHappyPath tests successful trigger - creates ingest run, background fails due to API key but completes 'error'
-//func testTriggerHappyPath(t *testing.T, dbHelper *DatabaseHelper, dataHelper *TestDataHelper, userID uuid.UUID) {
+//func testTriggerHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper, dataHelper *testutil.TestDataHelper, userID uuid.UUID) {
 //	dbHelper.CleanupTestData(t)
 //
 //	conn := dbHelper.GetDB()
-//	router := NewTestRouter(conn).GetEngine()
+//	router := testutil.NewTestRouter(conn).GetEngine()
 //
 //	// Count before
 //	var countBefore int
@@ -120,11 +121,11 @@ func TestIngestTriggerIntegration(t *testing.T) {
 //}
 
 // testTriggerBackfillHours tests parsing backfill_hours (not used but binds)
-func testTriggerBackfillHours(t *testing.T, dbHelper *DatabaseHelper, dataHelper *TestDataHelper, userID uuid.UUID) {
+func testTriggerBackfillHours(t *testing.T, dbHelper *testutil.DatabaseHelper, dataHelper *testutil.TestDataHelper, userID uuid.UUID) {
 	dbHelper.CleanupTestData(t)
 
 	conn := dbHelper.GetDB()
-	router := NewTestRouter(conn).GetEngine()
+	router := testutil.NewTestRouter(conn).GetEngine()
 
 	tests := []struct {
 		name string
@@ -152,11 +153,11 @@ func testTriggerBackfillHours(t *testing.T, dbHelper *DatabaseHelper, dataHelper
 }
 
 // testTriggerNoAuth tests missing auth header
-func testTriggerNoAuth(t *testing.T, dbHelper *DatabaseHelper, userID uuid.UUID) {
+func testTriggerNoAuth(t *testing.T, dbHelper *testutil.DatabaseHelper, userID uuid.UUID) {
 	dbHelper.CleanupTestData(t)
 
 	conn := dbHelper.GetDB()
-	router := NewTestRouter(conn).GetEngine()
+	router := testutil.NewTestRouter(conn).GetEngine()
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("POST", "/api/v1/ingest/trigger", nil)
@@ -168,11 +169,11 @@ func testTriggerNoAuth(t *testing.T, dbHelper *DatabaseHelper, userID uuid.UUID)
 }
 
 // testTriggerInvalidUserID tests invalid user ID
-func testTriggerInvalidUserID(t *testing.T, dbHelper *DatabaseHelper, userID uuid.UUID) {
+func testTriggerInvalidUserID(t *testing.T, dbHelper *testutil.DatabaseHelper, userID uuid.UUID) {
 	dbHelper.CleanupTestData(t)
 
 	conn := dbHelper.GetDB()
-	router := NewTestRouter(conn).GetEngine()
+	router := testutil.NewTestRouter(conn).GetEngine()
 
 	w := httptest.NewRecorder()
 	body := `{}`
@@ -188,11 +189,11 @@ func testTriggerInvalidUserID(t *testing.T, dbHelper *DatabaseHelper, userID uui
 }
 
 // testTriggerInvalidJSON tests invalid JSON
-//func testTriggerInvalidJSON(t *testing.T, dbHelper *DatabaseHelper, userID uuid.UUID) {
+//func testTriggerInvalidJSON(t *testing.T, dbHelper *testutil.DatabaseHelper, userID uuid.UUID) {
 //	dbHelper.CleanupTestData(t)
 //
 //	conn := dbHelper.GetDB()
-//	router := NewTestRouter(conn).GetEngine()
+//	router := testutil.NewTestRouter(conn).GetEngine()
 //
 //	w := httptest.NewRecorder()
 //	body := `{invalid json}`
@@ -208,7 +209,7 @@ func testTriggerInvalidUserID(t *testing.T, dbHelper *DatabaseHelper, userID uui
 //}
 
 // testTriggerConflict tests trigger when running ingest exists (service skips)
-//func testTriggerConflict(t *testing.T, dbHelper *DatabaseHelper, dataHelper *TestDataHelper, userID uuid.UUID) {
+//func testTriggerConflict(t *testing.T, dbHelper *testutil.DatabaseHelper, dataHelper *testutil.TestDataHelper, userID uuid.UUID) {
 //	dbHelper.CleanupTestData(t)
 //
 //	conn := dbHelper.GetDB()
@@ -222,7 +223,7 @@ func testTriggerInvalidUserID(t *testing.T, dbHelper *DatabaseHelper, userID uui
 //		t.Fatalf("Failed to count runs before: %v", err)
 //	}
 //
-//	router := NewTestRouter(conn).GetEngine()
+//	router := testutil.NewTestRouter(conn).GetEngine()
 //
 //	w := httptest.NewRecorder()
 //	body := `{}`

@@ -1,4 +1,4 @@
-package integration
+package testutil
 
 import (
 	"net/http"
@@ -43,13 +43,11 @@ func NewTestRouterWithClient(db *sqlx.DB, httpClient *http.Client) *TestRouter {
 
 	// Initialize QA dependencies
 	qaRepo := repositories.NewQARepository(db)
-	//postRepo := repositories.NewPostRepository(db)
 	llmService := services.NewLLMService(openRouterClient) // Mock service for testing
 	qaService := services.NewQAService(db, postRepo, qaRepo, llmService)
 	qaHandler := handlers.NewQAHandler(qaService)
 
 	// Initialize Following dependencies
-	//followingRepo := repositories.NewFollowingRepository(db)
 	followingService := services.NewFollowingService(followingRepo)
 	followingHandler := handlers.NewFollowingHandler(followingService)
 

@@ -1,4 +1,4 @@
-package integration
+package integration_test
 
 import (
 	"encoding/json"
@@ -13,11 +13,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sopeal/AskYourFeed/internal/dto"
+	"github.com/sopeal/AskYourFeed/internal/testutil"
 )
 
 // TestMain handles setup and teardown for all tests
 func TestMain(m *testing.M) {
-	dockerMgr := NewDockerManager()
+	dockerMgr := testutil.NewDockerManager()
 
 	if err := dockerMgr.SetupDatabase(); err != nil {
 		log.Fatalf("Failed to setup database: %v", err)
@@ -38,7 +39,7 @@ func TestIngestStatusIntegration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	// Initialize test database
-	dbHelper := NewDatabaseHelper(t)
+	dbHelper := testutil.NewDatabaseHelper(t)
 	defer dbHelper.Close()
 
 	db := dbHelper.GetDB()
@@ -74,11 +75,11 @@ func TestIngestStatusIntegration(t *testing.T) {
 }
 
 // testHappyPath tests the happy path scenario with completed runs
-func testHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
+func testHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	now := time.Now().UTC()
 
@@ -89,10 +90,10 @@ func testHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 
 	dataHelper.InsertIngestRun(t, userID, now.Add(-1*time.Hour-5*time.Minute), &completedAt1, "ok", 15, 0, 0, nil)
 	dataHelper.InsertIngestRun(t, userID, now.Add(-2*time.Hour-5*time.Minute), &completedAt2, "ok", 20, 0, 0, nil)
-	dataHelper.InsertIngestRun(t, userID, now.Add(-3*time.Hour-5*time.Minute), &completedAt3, "rate_limited", 8, 2, 3, StringPtr("Przekroczono limit żądań API X"))
+	dataHelper.InsertIngestRun(t, userID, now.Add(-3*time.Hour-5*time.Minute), &completedAt3, "rate_limited", 8, 2, 3, testutil.StringPtr("Przekroczono limit żądań API X"))
 
 	// Setup router and make request
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/ingest/status", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -150,13 +151,13 @@ func testHappyPath(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testNoData tests the scenario when user has no ingest runs
-func testNoData(t *testing.T, dbHelper *DatabaseHelper) {
+func testNoData(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/ingest/status", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -186,11 +187,11 @@ func testNoData(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testCurrentRunning tests the scenario with a currently running ingest
-func testCurrentRunning(t *testing.T, dbHelper *DatabaseHelper) {
+func testCurrentRunning(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000003")
 	now := time.Now().UTC()
 
@@ -201,7 +202,7 @@ func testCurrentRunning(t *testing.T, dbHelper *DatabaseHelper) {
 	completedAt1 := now.Add(-1 * time.Hour)
 	dataHelper.InsertIngestRun(t, userID, now.Add(-1*time.Hour-5*time.Minute), &completedAt1, "ok", 15, 0, 0, nil)
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/api/v1/ingest/status", nil)
 	req.Header.Set("Authorization", "Bearer test-token")
@@ -242,11 +243,11 @@ func testCurrentRunning(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testLimitParameter tests the limit query parameter
-func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
+func testLimitParameter(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	userID := uuid.MustParse("00000000-0000-0000-0000-000000000004")
 	now := time.Now().UTC()
 
@@ -256,7 +257,7 @@ func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
 		dataHelper.InsertIngestRun(t, userID, now.Add(-time.Duration(i+1)*time.Hour-5*time.Minute), &completedAt, "ok", 10+i, 0, 0, nil)
 	}
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	// Test default limit (10)
 	t.Run("DefaultLimit", func(t *testing.T) {
@@ -330,9 +331,9 @@ func testLimitParameter(t *testing.T, dbHelper *DatabaseHelper) {
 }
 
 // testEdgeCases tests edge cases and boundary conditions
-func testEdgeCases(t *testing.T, dbHelper *DatabaseHelper) {
+func testEdgeCases(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	db := dbHelper.GetDB()
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	// Test limit exceeds maximum (51)
 	t.Run("LimitExceedsMax", func(t *testing.T) {
@@ -445,7 +446,7 @@ func testEdgeCases(t *testing.T, dbHelper *DatabaseHelper) {
 
 // testErrorCases tests error scenarios
 func testErrorCases(t *testing.T, db *sqlx.DB) {
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	// Test missing authorization header
 	t.Run("MissingAuthHeader", func(t *testing.T) {
@@ -495,11 +496,11 @@ func testErrorCases(t *testing.T, db *sqlx.DB) {
 }
 
 // testMultipleUsers tests data isolation between users
-func testMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
+func testMultipleUsers(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
 
 	db := dbHelper.GetDB()
-	dataHelper := NewTestDataHelper(db)
+	dataHelper := testutil.NewTestDataHelper(db)
 	user1ID := uuid.MustParse("00000000-0000-0000-0000-000000000011")
 	user2ID := uuid.MustParse("00000000-0000-0000-0000-000000000012")
 	now := time.Now().UTC()
@@ -513,7 +514,7 @@ func testMultipleUsers(t *testing.T, dbHelper *DatabaseHelper) {
 	completedAt2 := now.Add(-30 * time.Minute)
 	dataHelper.InsertIngestRun(t, user2ID, now.Add(-30*time.Minute-5*time.Minute), &completedAt2, "ok", 30, 0, 0, nil)
 
-	router := NewTestRouter(db).GetEngine()
+	router := testutil.NewTestRouter(db).GetEngine()
 
 	// Request for user 1
 	t.Run("User1Data", func(t *testing.T) {

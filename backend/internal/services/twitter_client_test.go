@@ -1,4 +1,4 @@
-package integration
+package services
 
 import (
 	"context"
@@ -7,11 +7,135 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sopeal/AskYourFeed/internal/services"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestURLValidation tests that the Twitter client properly validates and normalizes URLs
+func TestURLValidation(t *testing.T) {
+	client := NewTwitterClient("test-key", nil)
+
+	tests := []struct {
+		name        string
+		tweetData   TweetData
+		expectedURL string
+	}{
+		{
+			name: "Valid x.com URL",
+			tweetData: TweetData{
+				ID:  "1995915875489382540",
+				URL: "https://x.com/MorawieckiM/status/1995915875489382540",
+				Author: UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1995915875489382540",
+			},
+			expectedURL: "https://x.com/MorawieckiM/status/1995915875489382540",
+		},
+		{
+			name: "Valid twitter.com URL",
+			tweetData: TweetData{
+				ID:  "1995915875489382540",
+				URL: "https://twitter.com/MorawieckiM/status/1995915875489382540",
+				Author: UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1995915875489382540",
+			},
+			expectedURL: "https://twitter.com/MorawieckiM/status/1995915875489382540",
+		},
+		{
+			name: "Empty URL - should construct from author and ID",
+			tweetData: TweetData{
+				ID:  "1995915875489382540",
+				URL: "",
+				Author: UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1995915875489382540",
+			},
+			expectedURL: "https://twitter.com/MorawieckiM/status/1995915875489382540",
+		},
+		{
+			name: "Invalid URL - should construct from author and ID",
+			tweetData: TweetData{
+				ID:  "1995915875489382540",
+				URL: "https://invalid.com/something",
+				Author: UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1995915875489382540",
+			},
+			expectedURL: "https://twitter.com/MorawieckiM/status/1995915875489382540",
+		},
+		{
+			name: "URL with query parameters - should remove them",
+			tweetData: TweetData{
+				ID:  "1998849925971673364",
+				URL: "https://x.com/MorawieckiM/status/1998849925971673364?s=20&t=abc123",
+				Author: UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1998849925971673364",
+			},
+			expectedURL: "https://x.com/MorawieckiM/status/1998849925971673364",
+		},
+		{
+			name: "URL with fragment - should remove it",
+			tweetData: TweetData{
+				ID:  "1998849925971673364",
+				URL: "https://twitter.com/MorawieckiM/status/1998849925971673364#reply",
+				Author: UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1998849925971673364",
+			},
+			expectedURL: "https://twitter.com/MorawieckiM/status/1998849925971673364",
+		},
+		{
+			name: "URL with both query and fragment - should remove both",
+			tweetData: TweetData{
+				ID:  "1998849925971673364",
+				URL: "https://x.com/MorawieckiM/status/1998849925971673364?s=20#reply",
+				Author: UserData{
+					ID:       "939053934232195072",
+					UserName: "MorawieckiM",
+				},
+				Text:           "Test tweet",
+				CreatedAt:      "Mon Dec 02 18:00:01 +0000 2025",
+				ConversationId: "1998849925971673364",
+			},
+			expectedURL: "https://x.com/MorawieckiM/status/1998849925971673364",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dto := client.ConvertToDTO(tt.tweetData)
+			if dto.URL != tt.expectedURL {
+				t.Errorf("Expected URL %s, got %s", tt.expectedURL, dto.URL)
+			}
+		})
+	}
+}
 
 func TestGetUserTweets(t *testing.T) {
 	// Read the mock response from test.json
@@ -112,7 +236,7 @@ func TestGetUserTweets(t *testing.T) {
 		mockStatusCode int
 		mockResponse   string
 		wantErr        bool
-		validateResult func(t *testing.T, resp *services.TweetResponse)
+		validateResult func(t *testing.T, resp *TweetResponse)
 	}{
 		{
 			name:           "successful request without cursor",
@@ -121,7 +245,7 @@ func TestGetUserTweets(t *testing.T) {
 			mockStatusCode: http.StatusOK,
 			mockResponse:   mockResponse,
 			wantErr:        false,
-			validateResult: func(t *testing.T, resp *services.TweetResponse) {
+			validateResult: func(t *testing.T, resp *TweetResponse) {
 				assert.NotNil(t, resp)
 				assert.Equal(t, "success", resp.Status)
 				assert.True(t, resp.HasNextPage)
@@ -175,7 +299,7 @@ func TestGetUserTweets(t *testing.T) {
 			mockStatusCode: http.StatusOK,
 			mockResponse:   mockResponse,
 			wantErr:        false,
-			validateResult: func(t *testing.T, resp *services.TweetResponse) {
+			validateResult: func(t *testing.T, resp *TweetResponse) {
 				assert.NotNil(t, resp)
 				assert.Len(t, resp.Tweets, 2)
 			},
@@ -226,16 +350,16 @@ func TestGetUserTweets(t *testing.T) {
 					assert.Equal(t, tt.cursor, query.Get("cursor"))
 				}
 
-			// Send mock response
-			w.WriteHeader(tt.mockStatusCode)
-			if _, err := w.Write([]byte(tt.mockResponse)); err != nil {
-				t.Errorf("Failed to write response: %v", err)
-			}
-		}))
+				// Send mock response
+				w.WriteHeader(tt.mockStatusCode)
+				if _, err := w.Write([]byte(tt.mockResponse)); err != nil {
+					t.Errorf("Failed to write response: %v", err)
+				}
+			}))
 			defer server.Close()
 
 			// Create Twitter client with mock server URL
-			client := services.NewTwitterClient("test-api-key", server.Client())
+			client := NewTwitterClient("test-api-key", server.Client())
 			client.BaseURL = server.URL
 
 			// Call the function
@@ -267,7 +391,7 @@ func TestGetUserTweets_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := services.NewTwitterClient("test-api-key", server.Client())
+	client := NewTwitterClient("test-api-key", server.Client())
 	client.BaseURL = server.URL
 
 	// Create a context that is already cancelled
@@ -324,7 +448,7 @@ func TestGetUserTweets_ResponseStructure(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := services.NewTwitterClient("test-api-key", server.Client())
+	client := NewTwitterClient("test-api-key", server.Client())
 	client.BaseURL = server.URL
 
 	resp, err := client.GetUserTweets(context.Background(), "testuser", "")

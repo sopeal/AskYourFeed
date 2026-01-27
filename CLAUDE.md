@@ -61,9 +61,17 @@ backend/
 │   ├── repositories/          # Data access layer (PostgreSQL)
 │   ├── middleware/            # Auth, CORS middleware
 │   ├── dto/                   # Request/Response DTOs
-│   └── db/                    # Database connection utilities
+│   ├── db/                    # Database connection utilities
+│   └── testutil/              # Shared test utilities (helpers, mocks)
+├── tests/
+│   └── integration/           # Integration tests
 └── pkg/logger/                # Shared logging package
 ```
+
+**Testing**:
+- Unit tests are co-located with code (e.g., `internal/services/*_test.go`)
+- Integration tests are in `tests/integration/`
+- Shared test utilities are in `internal/testutil/`
 
 **API Routes** (all under `/api/v1`):
 - `/auth/*` - Registration, login, logout

@@ -84,61 +84,6 @@ func TestQAIntegration(t *testing.T) {
 	})
 }
 
-// testCreateQAHappyPath tests successful QA creation
-//func testCreateQAHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper) {
-//	dbHelper.CleanupTestData(t)
-//
-//	db := dbHelper.GetDB()
-//	dataHelper := testutil.NewTestDataHelper(db)
-//	userID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-//	now := time.Now().UTC()
-//
-//	// Insert test author and posts
-//	dataHelper.InsertAuthor(t, 12345, "testuser", testutil.StringPtr("Test User"), &now)
-//	dataHelper.InsertPost(t, userID, 1001, 12345, now.Add(-1*time.Hour), "https://twitter.com/testuser/status/1001", "This is a test post about AI and machine learning.", nil, now, now, false)
-//	dataHelper.InsertPost(t, userID, 1002, 12345, now.Add(-2*time.Hour), "https://twitter.com/testuser/status/1002", "Another post discussing artificial intelligence trends.", nil, now, now, false)
-//
-//	router := testutil.NewTestRouter(db).GetEngine()
-//
-//	// Create QA request
-//	requestBody := dto.CreateQACommand{
-//		Question: "What are the latest trends in AI?",
-//		DateFrom: &now,
-//		DateTo:   &now,
-//	}
-//
-//	jsonBody, _ := json.Marshal(requestBody)
-//
-//	w := httptest.NewRecorder()
-//	req, _ := http.NewRequest("POST", "/api/v1/qa", bytes.NewBuffer(jsonBody))
-//	req.Header.Set("Authorization", "Bearer test-token")
-//	req.Header.Set("Content-Type", "application/json")
-//	req.Header.Set("X-Test-User-ID", userID.String())
-//
-//	router.ServeHTTP(w, req)
-//
-//	// Assert response
-//	if w.Code != http.StatusCreated {
-//		t.Errorf("Expected status 201, got %d. Body: %s", w.Code, w.Body.String())
-//	}
-//
-//	var response dto.QADetailDTO
-//	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-//		t.Fatalf("Failed to unmarshal response: %v", err)
-//	}
-//
-//	// Verify response structure
-//	if response.Question != requestBody.Question {
-//		t.Errorf("Expected question %s, got %s", requestBody.Question, response.Question)
-//	}
-//	if response.Answer == "" {
-//		t.Error("Expected non-empty answer")
-//	}
-//	if len(response.Sources) == 0 {
-//		t.Error("Expected sources to be populated")
-//	}
-//}
-
 // testCreateQAValidationErrors tests validation error scenarios
 func testCreateQAValidationErrors(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	db := dbHelper.GetDB()
@@ -435,53 +380,6 @@ func testListQAMultipleUsers(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	})
 }
 
-// testGetQAByIDHappyPath tests successful QA retrieval by ID
-//func testGetQAByIDHappyPath(t *testing.T, dbHelper *testutil.DatabaseHelper) {
-//	dbHelper.CleanupTestData(t)
-//
-//	db := dbHelper.GetDB()
-//	dataHelper := testutil.NewTestDataHelper(db)
-//	userID := uuid.MustParse("00000000-0000-0000-0000-000000000006")
-//	now := time.Now().UTC()
-//
-//	// Insert test data
-//	dataHelper.InsertAuthor(t, 12346, "testuser2", testutil.StringPtr("Test User 2"), &now)
-//	dataHelper.InsertPost(t, userID, 2001, 12346, now.Add(-1*time.Hour), "https://twitter.com/testuser2/status/2001", "Test post content", nil, now, now, false)
-//
-//	qaID := dataHelper.InsertQAMessage(t, userID, "Test question", "Test answer", now.Add(-24*time.Hour), now, now)
-//	dataHelper.InsertQASource(t, qaID, userID, 2001)
-//
-//	router := testutil.NewTestRouter(db).GetEngine()
-//	w := httptest.NewRecorder()
-//	req, _ := http.NewRequest("GET", "/api/v1/qa/"+qaID, nil)
-//	req.Header.Set("Authorization", "Bearer test-token")
-//	req.Header.Set("X-Test-User-ID", userID.String())
-//
-//	router.ServeHTTP(w, req)
-//
-//	if w.Code != http.StatusOK {
-//		t.Errorf("Expected status 200, got %d. Body: %s", w.Code, w.Body.String())
-//	}
-//
-//	var response dto.QADetailDTO
-//	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
-//		t.Fatalf("Failed to unmarshal response: %v", err)
-//	}
-//
-//	if response.ID != qaID {
-//		t.Errorf("Expected ID %s, got %s", qaID, response.ID)
-//	}
-//	if response.Question != "Test question" {
-//		t.Errorf("Expected question 'Test question', got '%s'", response.Question)
-//	}
-//	if response.Answer != "Test answer" {
-//		t.Errorf("Expected answer 'Test answer', got '%s'", response.Answer)
-//	}
-//	if len(response.Sources) != 1 {
-//		t.Errorf("Expected 1 source, got %d", len(response.Sources))
-//	}
-//}
-
 // testGetQAByIDNotFound tests QA retrieval when ID doesn't exist
 func testGetQAByIDNotFound(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 	dbHelper.CleanupTestData(t)
@@ -722,22 +620,6 @@ func testQAEdgeCases(t *testing.T, dbHelper *testutil.DatabaseHelper) {
 			t.Errorf("Expected status 404, got %d", w.Code)
 		}
 	})
-
-	//t.Run("EmptyQAID", func(t *testing.T) {
-	//	dbHelper.CleanupTestData(t)
-	//	userID := uuid.MustParse("00000000-0000-0000-0000-000000000014")
-	//
-	//	w := httptest.NewRecorder()
-	//	req, _ := http.NewRequest("GET", "/api/v1/qa/", nil)
-	//	req.Header.Set("Authorization", "Bearer test-token")
-	//	req.Header.Set("X-Test-User-ID", userID.String())
-	//
-	//	router.ServeHTTP(w, req)
-	//
-	//	if w.Code != http.StatusNotFound {
-	//		t.Errorf("Expected status 404, got %d", w.Code)
-	//	}
-	//})
 
 	t.Run("MalformedJSON", func(t *testing.T) {
 		dbHelper.CleanupTestData(t)
